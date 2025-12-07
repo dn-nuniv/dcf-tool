@@ -73,7 +73,7 @@ Stock Price = Equity Value / Shares
 git clone https://github.com/dn-nuniv/dcf-tool.git
 cd dcf-tool
 open index.html
-
+```
 ブラウザのみで実行できます（サーバ不要）。
 
 ⸻
