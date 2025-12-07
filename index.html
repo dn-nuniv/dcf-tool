@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monte Carlo DCF Simulator Ver.1.0</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-color: #1e293b;
+            --border-color: #e2e8f0;
+            --warning-bg: #fef2f2;
+            --warning-text: #991b1b;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+
+        @media (min-width: 1024px) {
+            .container {
+                grid-template-columns: 350px 1fr;
+            }
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        h1,
+        h2,
+        h3 {
+            margin-top: 0;
+            color: #0f172a;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        h2 {
+            font-size: 1.25rem;
+            margin-bottom: 0.75rem;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 0.5rem;
+        }
+
+        h3 {
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+            color: #475569;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.875rem;
+            margin-bottom: 4px;
+            font-weight: 500;
+        }
+
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 0.9rem;
+            box-sizing: border-box;
+        }
+
+        .row-inputs {
+            display: flex;
+            gap: 5px;
+        }
+
+        .row-inputs input {
+            width: 100%;
+        }
+
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-size: 0.875rem;
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            width: 100%;
+            font-size: 1rem;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #1d4ed8;
+        }
+
+        button.secondary {
+            background-color: #64748b;
+            margin-top: 10px;
+        }
+
+        button.secondary:hover {
+            background-color: #475569;
+        }
+
+        .warning-box {
+            background-color: var(--warning-bg);
+            color: var(--warning-text);
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #fecaca;
+            margin-bottom: 20px;
+            display: none;
+            /* Hidden by default */
+        }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .result-item {
+            background: #f1f5f9;
+            padding: 10px;
+            border-radius: 6px;
+        }
+
+        .result-label {
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+
+        .result-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 400px;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            resize: vertical;
+            margin-top: 10px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* Sensitivity Table Styles */
+        #sensitivityTable {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 0.9rem;
+        }
+
+        #sensitivityTable th,
+        #sensitivityTable td {
+            border: 1px solid #e2e8f0;
+            padding: 8px;
+            text-align: center;
+        }
+
+        #sensitivityTable th {
+            background-color: #f1f5f9;
+            font-weight: 600;
+        }
+
+        #sensitivityTable td {
+            background-color: #ffffff;
+        }
+
+        @media (max-width: 640px) {
+            .actions {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .actions button {
+                width: 100%;
+            }
+        }
+
+        /* Progress Bar */
+        #progressContainer {
+            margin-top: 10px;
+            width: 100%;
+        }
+
+        progress {
+            width: 100%;
+            height: 20px;
+        }
+
+        /* Responsive Fixes */
+        .table-container {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        #heatmapCanvas {
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <!-- Left Column: Inputs -->
+        <div class="sidebar">
+            <div class="card">
+                <h1>モンテカルロDCFシミュレーター Ver.1.0</h1>
+
+                <div class="input-group">
+                    <h3>(A) FCF計算 <span id="fcfHelp"
+                            title="本ツールでは簡易的なFCF（フリー・キャッシュフロー）として『営業CF − CapEx（有形・無形固定資産の取得額）』を使用しています。CFにはM&Aなどが含まれる場合があるため、実務での精緻な分析には追加調整が必要となります。"
+                            style="cursor:pointer; margin-left:4px; font-size:0.9rem;">❓</span></h3>
+
+                    <div class="radio-group"
+                        style="margin-bottom:15px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
+                        <label><input type="radio" name="calcMode" value="historical" checked
+                                onchange="toggleCalcMode()"> 過去平均から推計 (簡易)</label>
+                        <label><input type="radio" name="calcMode" value="future" onchange="toggleCalcMode()"> 将来予測を直接入力
+                            (詳細)</label>
+                    </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label>金額単位</label>
+                        <select id="unitSelect"
+                            style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 4px;">
+                            <option value="1">円</option>
+                            <option value="1000">千円</option>
+                            <option value="1000000" selected>百万円</option>
+                            <option value="100000000">億円</option>
+                        </select>
+                    </div>
+
+                    <div id="historical-inputs">
+                        <label>営業CF（営業活動によるCF合計） <span class="dynamic-unit"></span></label>
+                        <div class="row-inputs">
+                            <input type="number" inputmode="decimal" class="cfo-input" value="100" placeholder="100"
+                                title="キャッシュフロー計算書の “営業活動によるキャッシュ・フロー” の当期合計をそのまま入力">
+                            <input type="number" inputmode="decimal" class="cfo-input" value="110" placeholder="110"
+                                title="キャッシュフロー計算書の “営業活動によるキャッシュ・フロー” の当期合計をそのまま入力">
+                            <input type="number" inputmode="decimal" class="cfo-input" value="120" placeholder="120"
+                                title="キャッシュフロー計算書の “営業活動によるキャッシュ・フロー” の当期合計をそのまま入力">
+                            <input type="number" inputmode="decimal" class="cfo-input" value="130" placeholder="130"
+                                title="キャッシュフロー計算書の “営業活動によるキャッシュ・フロー” の当期合計をそのまま入力">
+                            <input type="number" inputmode="decimal" class="cfo-input" value="140" placeholder="140"
+                                title="キャッシュフロー計算書の “営業活動によるキャッシュ・フロー” の当期合計をそのまま入力">
+                        </div>
+                        <label style="margin-top:8px;">有形・無形固定資産の取得額（CapEx） <span class="dynamic-unit"></span></label>
+                        <div class="row-inputs">
+                            <input type="number" inputmode="decimal" class="cfi-input" value="20" placeholder="20"
+                                title="投資活動によるCFの内訳から『有形固定資産の取得による支出』『無形固定資産の取得による支出』を合計して、プラスの値で入力（△を外して入力）">
+                            <input type="number" inputmode="decimal" class="cfi-input" value="25" placeholder="25"
+                                title="投資活動によるCFの内訳から『有形固定資産の取得による支出』『無形固定資産の取得による支出』を合計して、プラスの値で入力（△を外して入力）">
+                            <input type="number" inputmode="decimal" class="cfi-input" value="30" placeholder="30"
+                                title="投資活動によるCFの内訳から『有形固定資産の取得による支出』『無形固定資産の取得による支出』を合計して、プラスの値で入力（△を外して入力）">
+                            <input type="number" inputmode="decimal" class="cfi-input" value="35" placeholder="35"
+                                title="投資活動によるCFの内訳から『有形固定資産の取得による支出』『無形固定資産の取得による支出』を合計して、プラスの値で入力（△を外して入力）">
+                            <input type="number" inputmode="decimal" class="cfi-input" value="40" placeholder="40"
+                                title="投資活動によるCFの内訳から『有形固定資産の取得による支出』『無形固定資産の取得による支出』を合計して、プラスの値で入力（△を外して入力）">
+                        </div>
+                        <div class="radio-group" style="margin-top:10px;">
+                            <label><input type="radio" name="fcfMethod" value="avg" checked> 安定成長型 (単純平均)</label>
+                            <label><input type="radio" name="fcfMethod" value="weighted"> 成長型 (加重平均)</label>
+                        </div>
+                        <div id="fcfPreview" class="info-text" style="margin-top:5px; font-weight:bold; color:#2563eb;">
+                            簡易FCF（営業CF - CapEx）: -</div>
+                    </div>
+
+                    <div id="future-inputs" class="hidden">
+                        <label>将来FCF (Year 1 - Year 5) <span class="dynamic-unit"></span></label>
+                        <div class="row-inputs">
+                            <input type="number" inputmode="decimal" class="future-fcf-input" value="100"
+                                placeholder="Y1">
+                            <input type="number" inputmode="decimal" class="future-fcf-input" value="110"
+                                placeholder="Y2">
+                            <input type="number" inputmode="decimal" class="future-fcf-input" value="120"
+                                placeholder="Y3">
+                            <input type="number" inputmode="decimal" class="future-fcf-input" value="130"
+                                placeholder="Y4">
+                            <input type="number" inputmode="decimal" class="future-fcf-input" value="140"
+                                placeholder="Y5">
+                        </div>
+                        <p style="font-size:0.8rem; color:#64748b; margin-top:5px;">
+                            ※ Year 5 の値と成長率(g)を用いて、Year 6以降のTerminal Valueを計算します。
+                        </p>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <h3>(B) 成長率 g (三角分布)</h3>
+                    <div class="row-inputs">
+                        <div><label>最小 (Min)</label><input type="number" inputmode="decimal" id="gMin" value="0.005"
+                                step="0.001" placeholder="0.005"></div>
+                        <div><label>最頻 (Mode)</label><input type="number" inputmode="decimal" id="gMode" value="0.01"
+                                step="0.001" placeholder="0.01"></div>
+                        <div><label>最大 (Max)</label><input type="number" inputmode="decimal" id="gMax" value="0.02"
+                                step="0.001" placeholder="0.02"></div>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <h3>(C) 割引率 r (WACC)</h3>
+                    <label><input type="checkbox" id="rFixedCheck"> rを固定する</label>
+                    <div id="r-range-inputs" class="row-inputs">
+                        <div><label>最小 (Min)</label><input type="number" inputmode="decimal" id="rMin" value="0.05"
+                                step="0.001" placeholder="0.05"></div>
+                        <div><label>最頻 (Mode)</label><input type="number" inputmode="decimal" id="rMode" value="0.06"
+                                step="0.001" placeholder="0.06"></div>
+                        <div><label>最大 (Max)</label><input type="number" inputmode="decimal" id="rMax" value="0.08"
+                                step="0.001" placeholder="0.08"></div>
+                    </div>
+                    <div id="r-fixed-input" class="hidden">
+                        <label>固定 r</label><input type="number" inputmode="decimal" id="rFixed" value="0.06"
+                            step="0.001" placeholder="0.06">
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <h3>(D) 資本構成・株価</h3>
+                    <label>有利子負債 (Debt) <span class="dynamic-unit"></span></label><input type="number"
+                        inputmode="decimal" id="debt" value="500" placeholder="500">
+                    <label>現金等 (Cash) <span class="dynamic-unit"></span></label><input type="number" inputmode="decimal"
+                        id="cash" value="200" placeholder="200">
+                    <label>発行株式数 (Shares) (株)</label><input type="number" inputmode="decimal" id="shares"
+                        value="1000000" placeholder="1000000">
+                    <label>現在株価 (Current Price) (円)</label><input type="number" inputmode="decimal" id="currentPrice"
+                        value="1500" placeholder="1500">
+                    <div style="margin-top:5px; font-size:0.85rem; color:#64748b;">Net Debt: <span
+                            id="netDebtDisplay">300</span> <span class="dynamic-unit"></span></div>
+                </div>
+
+                <div class="input-group">
+                    <h3>(E) 設定</h3>
+                    <label>試行回数 (n)</label><input type="number" inputmode="numeric" id="iterations" value="10000"
+                        placeholder="10000">
+                </div>
+
+                <div style="display:flex; gap:10px;">
+                    <button type="button" id="runMcBtn" style="flex:2;">シミュレーション実行</button>
+                    <button type="button" id="resetBtn" class="secondary" style="flex:1; margin-top:0;">データ消去</button>
+                </div>
+
+                <div id="progressContainer" class="hidden">
+                    <div style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:2px;">
+                        <span>計算中...</span>
+                        <span id="progressLabel">0%</span>
+                    </div>
+                    <progress id="progressBar" value="0" max="100"></progress>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Results -->
+        <div class="main-content">
+            <div id="warningArea" class="warning-box"></div>
+
+            <div class="card">
+                <h2>結果サマリー</h2>
+                <div class="results-grid">
+                    <div class="result-item">
+                        <div class="result-label">推計安定FCF0 <span class="dynamic-unit"></span></div>
+                        <div class="result-value" id="resFcf0">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">理論株価 (モードDCF) (円)</div>
+                        <div class="result-value" id="resModePrice">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">理論株価 (平均) (円)</div>
+                        <div class="result-value" id="resMeanPrice">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">理論株価 (中央値) (円)</div>
+                        <div class="result-value" id="resMedianPrice">-</div>
+                    </div>
+                    <div class="result-item" style="grid-column: span 2;">
+                        <div class="result-label">5%点 - 95%点 レンジ (円)</div>
+                        <div class="result-value" id="resRange">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">現在株価を上回る確率</div>
+                        <div class="result-value" id="resProb">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">モードDCFの位置 (％点)</div>
+                        <div class="result-value" id="resModePct">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">現在株価の位置 (％点)</div>
+                        <div class="result-value" id="resCurrentPct">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Sensitivity Analysis (感応度分析)</h2>
+                <p style="font-size:0.85rem; color:#64748b; margin-bottom:10px;">成長率(g)と割引率(r)の組み合わせによる理論株価マトリックス
+                </p>
+                <div class="table-container">
+                    <table id="sensitivityTable">
+                        <!-- Generated by JS -->
+                    </table>
+                </div>
+
+                <div id="heatmapContainer" style="margin-top: 20px; text-align: center; display: none;">
+                    <h3>詳細ヒートマップ (g vs r)</h3>
+                    <div style="position: relative; display: inline-block;">
+                        <canvas id="heatmapCanvas" width="400" height="400"
+                            style="border: 1px solid #ccc; cursor: crosshair;"></canvas>
+                        <div id="heatmapTooltip" style="
+                            position: absolute;
+                            background: rgba(0, 0, 0, 0.8);
+                            color: white;
+                            padding: 5px 10px;
+                            border-radius: 4px;
+                            font-size: 12px;
+                            pointer-events: none;
+                            display: none;
+                            z-index: 10;
+                            white-space: nowrap;
+                            text-align: left;
+                        "></div>
+                    </div>
+                    <div style="font-size: 0.8rem; color: #64748b; margin-top: 5px;">
+                        縦軸: 成長率 (g) / 横軸: 割引率 (r)<br>
+                        <span style="color: #1d4ed8;">■</span> 安値 &nbsp; <span style="color: #dc2626;">■</span> 高値
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <button type="button" class="secondary" id="downloadHeatmapTsvBtn"
+                            style="font-size: 0.8rem; padding: 4px 8px;">TSV保存</button>
+                        <button type="button" class="secondary" id="saveHeatmapPngBtn"
+                            style="font-size: 0.8rem; padding: 4px 8px;">画像保存</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>分布ヒストグラム</h2>
+                <div class="chart-container">
+                    <canvas id="histogramChart"></canvas>
+                </div>
+                <div class="actions">
+                    <button type="button" class="secondary" id="downloadCsvBtn">TSVダウンロード</button>
+                    <button type="button" class="secondary" id="downloadRawBtn">生データTSVダウンロード</button>
+                    <button type="button" class="secondary" id="downloadPngBtn">グラフPNG保存</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>AI解説プロンプト生成</h2>
+                <div class="actions">
+                    <button type="button" id="generatePromptBtn">解説用プロンプト生成</button>
+                    <button type="button" class="secondary" id="copyPromptBtn" style="margin-top:0;">コピー</button>
+                </div>
+                <textarea id="promptOutput" readonly placeholder="生成ボタンを押すと、AI分析用のプロンプトがここに作成されます..."></textarea>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
