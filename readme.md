@@ -153,13 +153,15 @@ FCF₁ = FCF₀ × (1 + g)
 TV   = FCF₁ / (r − g)
 Equity Value = TV − Net Debt
 Stock Price  = Equity Value / Shares
-
+```
 	•	不正試行（r ≤ g）は除外。
 	•	試行結果（通常 10,000 回以上）から統計量および分布を生成。
 
 将来予測モードでは、1〜5年の FCF を個別に入力し、
 
+```
 Equity Value = Σ FCF_t / (1 + r)^t  +  TV / (1 + r)^5  − Net Debt
+```
 
 として算定します。
 
@@ -232,9 +234,11 @@ CF計算書の構造自体が一般事業会社と異なるケースでは、本
 
 📦 Setup（導入方法）
 
+```
 git clone https://github.com/dn-nuniv/dcf-tool.git
 cd dcf-tool
 open index.html
+```
 
 ブラウザのみで実行できます（サーバ不要）。
 
