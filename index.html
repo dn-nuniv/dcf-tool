@@ -87,6 +87,7 @@
         }
 
         input[type="number"],
+        input[type="text"],
         select {
             width: 100%;
             padding: 8px;
@@ -299,28 +300,38 @@
                     <div id="historical-inputs">
                         <label>営業CF（営業活動によるCF合計） <span class="dynamic-unit"></span></label>
                         <div class="row-inputs">
-                            <input type="number" inputmode="decimal" class="cfo-input" value="100" placeholder="100"
+                            <input type="text" inputmode="decimal" class="cfo-input comma-format" value="100"
+                                placeholder="100"
                                 title="キャッシュフロー計算書の “営業活動によるキャッシュ・フロー” の当期合計をそのまま入力">
-                            <input type="number" inputmode="decimal" class="cfo-input" value="110" placeholder="110"
+                            <input type="text" inputmode="decimal" class="cfo-input comma-format" value="110"
+                                placeholder="110"
                                 title="キャッシュフロー計算書の “営業活動によるキャッシュ・フロー” の当期合計をそのまま入力">
-                            <input type="number" inputmode="decimal" class="cfo-input" value="120" placeholder="120"
+                            <input type="text" inputmode="decimal" class="cfo-input comma-format" value="120"
+                                placeholder="120"
                                 title="キャッシュフロー計算書の “営業活動によるキャッシュ・フロー” の当期合計をそのまま入力">
-                            <input type="number" inputmode="decimal" class="cfo-input" value="130" placeholder="130"
+                            <input type="text" inputmode="decimal" class="cfo-input comma-format" value="130"
+                                placeholder="130"
                                 title="キャッシュフロー計算書の “営業活動によるキャッシュ・フロー” の当期合計をそのまま入力">
-                            <input type="number" inputmode="decimal" class="cfo-input" value="140" placeholder="140"
+                            <input type="text" inputmode="decimal" class="cfo-input comma-format" value="140"
+                                placeholder="140"
                                 title="キャッシュフロー計算書の “営業活動によるキャッシュ・フロー” の当期合計をそのまま入力">
                         </div>
                         <label style="margin-top:8px;">有形・無形固定資産の取得額（CapEx） <span class="dynamic-unit"></span></label>
                         <div class="row-inputs">
-                            <input type="number" inputmode="decimal" class="cfi-input" value="20" placeholder="20"
+                            <input type="text" inputmode="decimal" class="cfi-input comma-format" value="20"
+                                placeholder="20"
                                 title="投資活動によるCFの内訳から『有形固定資産の取得による支出』『無形固定資産の取得による支出』を合計して、プラスの値で入力（△を外して入力）">
-                            <input type="number" inputmode="decimal" class="cfi-input" value="25" placeholder="25"
+                            <input type="text" inputmode="decimal" class="cfi-input comma-format" value="25"
+                                placeholder="25"
                                 title="投資活動によるCFの内訳から『有形固定資産の取得による支出』『無形固定資産の取得による支出』を合計して、プラスの値で入力（△を外して入力）">
-                            <input type="number" inputmode="decimal" class="cfi-input" value="30" placeholder="30"
+                            <input type="text" inputmode="decimal" class="cfi-input comma-format" value="30"
+                                placeholder="30"
                                 title="投資活動によるCFの内訳から『有形固定資産の取得による支出』『無形固定資産の取得による支出』を合計して、プラスの値で入力（△を外して入力）">
-                            <input type="number" inputmode="decimal" class="cfi-input" value="35" placeholder="35"
+                            <input type="text" inputmode="decimal" class="cfi-input comma-format" value="35"
+                                placeholder="35"
                                 title="投資活動によるCFの内訳から『有形固定資産の取得による支出』『無形固定資産の取得による支出』を合計して、プラスの値で入力（△を外して入力）">
-                            <input type="number" inputmode="decimal" class="cfi-input" value="40" placeholder="40"
+                            <input type="text" inputmode="decimal" class="cfi-input comma-format" value="40"
+                                placeholder="40"
                                 title="投資活動によるCFの内訳から『有形固定資産の取得による支出』『無形固定資産の取得による支出』を合計して、プラスの値で入力（△を外して入力）">
                         </div>
                         <div class="radio-group" style="margin-top:10px;">
@@ -334,15 +345,15 @@
                     <div id="future-inputs" class="hidden">
                         <label>将来FCF (Year 1 - Year 5) <span class="dynamic-unit"></span></label>
                         <div class="row-inputs">
-                            <input type="number" inputmode="decimal" class="future-fcf-input" value="100"
+                            <input type="text" inputmode="decimal" class="future-fcf-input comma-format" value="100"
                                 placeholder="Y1">
-                            <input type="number" inputmode="decimal" class="future-fcf-input" value="110"
+                            <input type="text" inputmode="decimal" class="future-fcf-input comma-format" value="110"
                                 placeholder="Y2">
-                            <input type="number" inputmode="decimal" class="future-fcf-input" value="120"
+                            <input type="text" inputmode="decimal" class="future-fcf-input comma-format" value="120"
                                 placeholder="Y3">
-                            <input type="number" inputmode="decimal" class="future-fcf-input" value="130"
+                            <input type="text" inputmode="decimal" class="future-fcf-input comma-format" value="130"
                                 placeholder="Y4">
-                            <input type="number" inputmode="decimal" class="future-fcf-input" value="140"
+                            <input type="text" inputmode="decimal" class="future-fcf-input comma-format" value="140"
                                 placeholder="Y5">
                         </div>
                         <p style="font-size:0.8rem; color:#64748b; margin-top:5px;">
@@ -354,11 +365,11 @@
                 <div class="input-group">
                     <h3>(B) 成長率 g (三角分布)</h3>
                     <div class="row-inputs">
-                        <div><label>最小 (Min)</label><input type="number" inputmode="decimal" id="gMin" value="0.005"
-                                step="0.001" placeholder="0.005"></div>
-                        <div><label>最頻 (Mode)</label><input type="number" inputmode="decimal" id="gMode" value="0.01"
-                                step="0.001" placeholder="0.01"></div>
-                        <div><label>最大 (Max)</label><input type="number" inputmode="decimal" id="gMax" value="0.02"
+                    <div><label>最小 (Min)</label><input type="number" inputmode="decimal" id="gMin" value="0.005"
+                            step="0.001" placeholder="0.005"></div>
+                    <div><label>最頻 (Mode)</label><input type="number" inputmode="decimal" id="gMode" value="0.01"
+                            step="0.001" placeholder="0.01"></div>
+                    <div><label>最大 (Max)</label><input type="number" inputmode="decimal" id="gMax" value="0.02"
                                 step="0.001" placeholder="0.02"></div>
                     </div>
                 </div>
@@ -382,14 +393,14 @@
 
                 <div class="input-group">
                     <h3>(D) 資本構成・株価</h3>
-                    <label>有利子負債 (Debt) <span class="dynamic-unit"></span></label><input type="number"
-                        inputmode="decimal" id="debt" value="500" placeholder="500">
-                    <label>現金等 (Cash) <span class="dynamic-unit"></span></label><input type="number" inputmode="decimal"
-                        id="cash" value="200" placeholder="200">
-                    <label>発行株式数 (Shares) (株)</label><input type="number" inputmode="decimal" id="shares"
-                        value="1000000" placeholder="1000000">
-                    <label>現在株価 (Current Price) (円)</label><input type="number" inputmode="decimal" id="currentPrice"
-                        value="1500" placeholder="1500">
+                    <label>有利子負債 (Debt) <span class="dynamic-unit"></span></label><input type="text"
+                        inputmode="decimal" id="debt" class="comma-format" value="500" placeholder="500">
+                    <label>現金等 (Cash) <span class="dynamic-unit"></span></label><input type="text" inputmode="decimal"
+                        id="cash" class="comma-format" value="200" placeholder="200">
+                    <label>発行株式数 (Shares) (株)</label><input type="text" inputmode="decimal" id="shares"
+                        class="comma-format" value="1000000" placeholder="1000000">
+                    <label>現在株価 (Current Price) (円)</label><input type="text" inputmode="decimal" id="currentPrice"
+                        class="comma-format" value="1500" placeholder="1500">
                     <div style="margin-top:5px; font-size:0.85rem; color:#64748b;">Net Debt: <span
                             id="netDebtDisplay">300</span> <span class="dynamic-unit"></span></div>
                 </div>
@@ -581,10 +592,25 @@
                 <h3 style="border-left: 4px solid #059669; padding-left: 10px;">(3) Implied g vs FCF 分布</h3>
                 <p style="font-size:0.8rem; color:#64748b; margin-bottom:10px;">市場価格を正当化する「成長率(g)」と「FCF」の組み合わせ分布</p>
 
-                <div style="text-align: center; position: relative;">
+                <div id="impliedHeatmapWrapper" class="hidden" style="text-align: center; position: relative;">
                     <canvas id="impliedHeatmapCanvas" width="500" height="400"
                         style="background:#fff; cursor:crosshair; border:1px solid #e2e8f0; max-width:100%; height:auto;"></canvas>
+                    <div id="impliedHeatmapTooltip" style="
+                        position: absolute;
+                        background: rgba(0, 0, 0, 0.8);
+                        color: white;
+                        padding: 5px 10px;
+                        border-radius: 4px;
+                        font-size: 12px;
+                        pointer-events: none;
+                        display: none;
+                        z-index: 10;
+                        white-space: nowrap;
+                        text-align: left;
+                    "></div>
                 </div>
+                <div id="impliedHeatmapPeak" class="hidden"
+                    style="margin-top: 8px; text-align: center; font-size: 0.9rem; color: #334155;"></div>
 
                 <div class="actions" style="justify-content: center; margin-top: 10px;">
                     <button type="button" class="secondary" id="downloadImpliedHeatmapTsvBtn">TSVダウンロード</button>

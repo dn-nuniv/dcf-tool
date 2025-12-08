@@ -97,41 +97,59 @@ function percentileRank(sortedArr, value) {
     return (count / sortedArr.length) * 100;
 }
 
+// Normalize numeric string (strip commas)
+function normalizeNumberString(str) {
+    return (str || '').toString().replace(/,/g, '').trim();
+}
+
+// Read numeric input safely (returns NaN on invalid)
+function readNumberInput(el) {
+    const normalized = normalizeNumberString(el.value);
+    const val = parseFloat(normalized);
+    return val;
+}
+
+// Format number for inputs (keeps up to 6 decimals, adds commas)
+function formatInputNumber(num) {
+    if (!Number.isFinite(num)) return '';
+    return Number(num).toLocaleString(undefined, { maximumFractionDigits: 6 });
+}
+
 // --- Core Logic ---
 
 function getInputs() {
     const unitMult = parseFloat(document.getElementById('unitSelect').value) || 1;
 
-    const currentPrice = parseFloat(document.getElementById('currentPrice').value);
-    const shares = parseFloat(document.getElementById('shares').value);
-    const debt = (parseFloat(document.getElementById('debt').value) || 0) * unitMult;
-    const cash = (parseFloat(document.getElementById('cash').value) || 0) * unitMult;
+    const currentPrice = readNumberInput(document.getElementById('currentPrice'));
+    const shares = readNumberInput(document.getElementById('shares'));
+    const debt = (readNumberInput(document.getElementById('debt')) || 0) * unitMult;
+    const cash = (readNumberInput(document.getElementById('cash')) || 0) * unitMult;
 
     // Historical FCF
-    const cfoInputs = Array.from(document.querySelectorAll('.cfo-input')).map(i => parseFloat(i.value) * unitMult);
-    const cfiInputs = Array.from(document.querySelectorAll('.cfi-input')).map(i => parseFloat(i.value) * unitMult);
+    const cfoInputs = Array.from(document.querySelectorAll('.cfo-input')).map(i => readNumberInput(i) * unitMult);
+    const cfiInputs = Array.from(document.querySelectorAll('.cfi-input')).map(i => readNumberInput(i) * unitMult);
     const fcfMethod = document.querySelector('input[name="fcfMethod"]:checked').value;
 
     // Future FCF Inputs
-    const futureFcfInputs = Array.from(document.querySelectorAll('.future-fcf-input')).map(i => parseFloat(i.value) * unitMult);
+    const futureFcfInputs = Array.from(document.querySelectorAll('.future-fcf-input')).map(i => readNumberInput(i) * unitMult);
 
     // Growth Rate
-    const gMin = parseFloat(document.getElementById('gMin').value);
-    const gMode = parseFloat(document.getElementById('gMode').value);
-    const gMax = parseFloat(document.getElementById('gMax').value);
+    const gMin = readNumberInput(document.getElementById('gMin'));
+    const gMode = readNumberInput(document.getElementById('gMode'));
+    const gMax = readNumberInput(document.getElementById('gMax'));
 
     // Discount Rate
     const rFixedCheck = document.getElementById('rFixedCheck').checked;
-    const rMin = parseFloat(document.getElementById('rMin').value);
-    const rMode = parseFloat(document.getElementById('rMode').value);
-    const rMax = parseFloat(document.getElementById('rMax').value);
-    const rFixed = parseFloat(document.getElementById('rFixed').value);
+    const rMin = readNumberInput(document.getElementById('rMin'));
+    const rMode = readNumberInput(document.getElementById('rMode'));
+    const rMax = readNumberInput(document.getElementById('rMax'));
+    const rFixed = readNumberInput(document.getElementById('rFixed'));
 
     // Mode Selection
     const calcMode = document.querySelector('input[name="calcMode"]:checked').value;
 
     // Settings
-    const iterations = parseInt(document.getElementById('iterations').value);
+    const iterations = parseInt(normalizeNumberString(document.getElementById('iterations').value));
     const randomSeed = document.getElementById('randomSeed').value; // String, empty if not set
 
     return {
@@ -461,8 +479,8 @@ function updateUnitLabels() {
 }
 
 function updateNetDebtDisplay() {
-    const debt = parseFloat(document.getElementById('debt').value) || 0;
-    const cash = parseFloat(document.getElementById('cash').value) || 0;
+    const debt = readNumberInput(document.getElementById('debt')) || 0;
+    const cash = readNumberInput(document.getElementById('cash')) || 0;
     const netDebt = debt - cash;
     document.getElementById('netDebtDisplay').textContent = formatNumber(netDebt);
 }
@@ -472,8 +490,8 @@ function updateFcfPreview() {
     const unitText = unitSelect.options[unitSelect.selectedIndex].text;
 
     // Calculate Average of Inputs
-    const cfoInputs = Array.from(document.querySelectorAll('.cfo-input')).map(i => parseFloat(i.value));
-    const cfiInputs = Array.from(document.querySelectorAll('.cfi-input')).map(i => parseFloat(i.value));
+    const cfoInputs = Array.from(document.querySelectorAll('.cfo-input')).map(i => readNumberInput(i));
+    const cfiInputs = Array.from(document.querySelectorAll('.cfi-input')).map(i => readNumberInput(i));
 
     const validCfo = cfoInputs.filter(v => !isNaN(v));
     const validCfi = cfiInputs.filter(v => !isNaN(v));
@@ -961,6 +979,7 @@ function updateChart(prices, modePrice, currentPrice) {
 // --- Reverse DCF (Implied Analysis) ---
 
 let impliedResults = {};
+let impliedHeatmapState = null;
 
 // Helper for max/min to avoid stack overflow
 function getMinMax(arr) {
@@ -1085,8 +1104,16 @@ async function runImpliedSimulation() {
         renderHistogram('impliedGChart', impliedGSamples, "Implied g", params.gMode, true);
 
         renderImpliedHeatmap(impliedFcfSamples, impliedGSamples);
+        const impliedWrapper = document.getElementById('impliedHeatmapWrapper');
+    if (impliedWrapper) {
+        impliedWrapper.classList.remove('hidden');
+    }
+    const impliedPeak = document.getElementById('impliedHeatmapPeak');
+    if (impliedPeak && impliedResults.fcfSamples && impliedResults.fcfSamples.length) {
+        impliedPeak.classList.remove('hidden');
+    }
 
-    } catch (e) {
+} catch (e) {
         console.error(e);
         alert("エラーが発生しました: " + e.message);
     } finally {
@@ -1183,6 +1210,8 @@ function renderHistogram(canvasId, data, label, referenceVal, isPercent = false)
 
 function renderImpliedHeatmap(fcfArr, gArr) {
     const canvas = document.getElementById('impliedHeatmapCanvas');
+    const tooltip = document.getElementById('impliedHeatmapTooltip');
+    const peakEl = document.getElementById('impliedHeatmapPeak');
     const ctx = canvas.getContext('2d');
     const w = canvas.width;
     const h = canvas.height;
@@ -1204,6 +1233,8 @@ function renderImpliedHeatmap(fcfArr, gArr) {
     const fcfRange = fcfMax - fcfMin || 1;
 
     let maxFreq = 0;
+    let peakRow = 0;
+    let peakCol = 0;
 
     // Parallel loop
     for (let i = 0; i < fcfArr.length; i++) {
@@ -1216,7 +1247,11 @@ function renderImpliedHeatmap(fcfArr, gArr) {
         if (ri >= bins) ri = bins - 1; if (ri < 0) ri = 0;
 
         grid[ri][ci]++;
-        if (grid[ri][ci] > maxFreq) maxFreq = grid[ri][ci];
+        if (grid[ri][ci] > maxFreq) {
+            maxFreq = grid[ri][ci];
+            peakRow = ri;
+            peakCol = ci;
+        }
     }
 
     const cellW = w / bins;
@@ -1224,10 +1259,8 @@ function renderImpliedHeatmap(fcfArr, gArr) {
 
     for (let i = 0; i < bins; i++) { // Y(g)
         for (let j = 0; j < bins; j++) { // X(fcf)
-            // Y is inverted in canvas (0 top). Let's map Min G to Bottom.
-            // So row i=0 is Top (Max G).
             const val = grid[i][j];
-            const intensity = val / maxFreq;
+            const intensity = maxFreq > 0 ? val / maxFreq : 0;
             // Color: White -> Green
             const gVal = Math.floor(255 - intensity * 150);
             ctx.fillStyle = `rgb(${gVal}, 255, ${gVal})`;
@@ -1249,6 +1282,51 @@ function renderImpliedHeatmap(fcfArr, gArr) {
     ctx.rotate(-Math.PI / 2);
     ctx.fillText("Growth Rate (g)", 0, 0);
     ctx.restore();
+
+    // Store state for hover tooltip
+    impliedHeatmapState = {
+        fcfMin, fcfMax, gMin, gMax, fcfRange, gRange, bins, cellW, cellH, grid
+    };
+
+    // Display peak info
+    if (peakEl) {
+        if (maxFreq > 0) {
+            const fcfCenter = fcfMin + (peakCol + 0.5) * (fcfRange / bins);
+            const gCenter = gMin + (peakRow + 0.5) * (gRange / bins);
+            const pct = (maxFreq / fcfArr.length) * 100;
+            peakEl.textContent = `最も出現頻度の高い組み合わせ： g ≈ ${(gCenter * 100).toFixed(2)}% 、 FCF ≈ ${formatNumber(fcfCenter)} （全シナリオの ${pct.toFixed(1)}%）`;
+            peakEl.classList.remove('hidden');
+        } else {
+            peakEl.classList.add('hidden');
+            peakEl.textContent = '';
+        }
+    }
+
+    canvas.onmousemove = function (e) {
+        if (!impliedHeatmapState || !tooltip) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const col = Math.min(impliedHeatmapState.bins - 1, Math.max(0, Math.floor(x / impliedHeatmapState.cellW)));
+        const row = Math.min(impliedHeatmapState.bins - 1, Math.max(0, Math.floor(y / impliedHeatmapState.cellH)));
+
+        const fcfVal = impliedHeatmapState.fcfMin + (col + 0.5) * (impliedHeatmapState.fcfRange / impliedHeatmapState.bins);
+        const gVal = impliedHeatmapState.gMin + (row + 0.5) * (impliedHeatmapState.gRange / impliedHeatmapState.bins);
+        const freq = impliedHeatmapState.grid[row][col];
+
+        tooltip.style.display = 'block';
+        tooltip.style.left = (x + 12) + 'px';
+        tooltip.style.top = (y + 12) + 'px';
+        tooltip.innerHTML = `
+            g: ${(gVal * 100).toFixed(2)}%<br>
+            FCF: ${formatNumber(fcfVal)}<br>
+            頻度: ${freq}
+        `;
+    };
+
+    canvas.onmouseleave = function () {
+        if (tooltip) tooltip.style.display = 'none';
+    };
 }
 
 function downloadHeatmapGenericTsv() {
@@ -1408,6 +1486,20 @@ function generatePrompt() {
         fcfDesc = `- 基準年FCF（推計）：${fcf0.toFixed(2)}`;
     }
 
+    // Reverse DCF (implied) section
+    let impliedSection = "逆DCF（市場織り込み）: 未計算";
+    if (impliedResults && impliedResults.fcfStats && impliedResults.gStats) {
+        const unitDiv = impliedResults.params ? impliedResults.params.unitMult : 1;
+        const fcfStats = impliedResults.fcfStats;
+        const gStats = impliedResults.gStats;
+        const fmtPct = (n) => (n * 100).toFixed(2) + "%";
+        impliedSection = `
+逆DCF（市場が織り込む水準）:
+- Implied FCF: 平均=${formatNumber(fcfStats.mean / unitDiv)} / 中央値=${formatNumber(fcfStats.median / unitDiv)} / 5%-95%=${formatNumber(fcfStats.p05 / unitDiv)}～${formatNumber(fcfStats.p95 / unitDiv)}
+- Implied g: 平均=${fmtPct(gStats.mean)} / 中央値=${fmtPct(gStats.median)} / 5%-95%=${fmtPct(gStats.p05)}～${fmtPct(gStats.p95)}
+        `.trim();
+    }
+
     const text = `
 以下の前提でモンテカルロDCFシミュレーションを行いました。
 前提：
@@ -1429,6 +1521,8 @@ ${fcfDesc}
 
 - モードDCFの位置（理論価格分布の中のパーセンタイル）： ${Number.isFinite(modePercentile) ? modePercentile.toFixed(1) + "%" : "N/A"}
 - 現在株価の位置（理論価格分布の中のパーセンタイル）： ${Number.isFinite(currentPercentile) ? currentPercentile.toFixed(1) + "%" : "N/A"}
+
+${impliedSection}
 
 これらの結果を踏まえて、投資家向けにわかりやすい言葉で、
 企業価値評価とリスク・不確実性について解説してください。
@@ -1493,6 +1587,13 @@ function resetInputs(e) {
     document.getElementById('resCurrentPct').textContent = "-";
     document.getElementById('sensitivityTable').innerHTML = "";
     document.getElementById('heatmapContainer').style.display = 'none';
+    const impliedWrapper = document.getElementById('impliedHeatmapWrapper');
+    if (impliedWrapper) impliedWrapper.classList.add('hidden');
+    const impliedPeak = document.getElementById('impliedHeatmapPeak');
+    if (impliedPeak) {
+        impliedPeak.classList.add('hidden');
+        impliedPeak.textContent = '';
+    }
 
     if (chartInstance) {
         chartInstance.destroy();
@@ -1507,6 +1608,50 @@ function resetInputs(e) {
     toggleRInputs();
     updateNetDebtDisplay();
     updateFcfPreview();
+}
+
+function formatExistingCommaFields() {
+    document.querySelectorAll('.comma-format').forEach(input => {
+        const num = readNumberInput(input);
+        if (!isNaN(num)) {
+            input.value = formatInputNumber(num);
+        }
+    });
+}
+
+function setupFocusAndPlaceholderBehavior() {
+    const targets = Array.from(document.querySelectorAll('input'))
+        .filter(input => input.type !== 'radio' && input.type !== 'checkbox');
+
+    targets.forEach(input => {
+        input.addEventListener('focus', () => {
+            input.dataset.prevValue = input.value;
+            input.value = "";
+        });
+
+        input.addEventListener('blur', () => {
+            const fallback = input.dataset.prevValue || "";
+            const raw = input.value.trim();
+            const targetText = raw === "" ? fallback : raw;
+
+            if (targetText === "") {
+                input.value = "";
+                return;
+            }
+
+            const num = parseFloat(normalizeNumberString(targetText));
+            if (isNaN(num)) {
+                input.value = targetText;
+                return;
+            }
+
+            if (input.classList.contains('comma-format')) {
+                input.value = formatInputNumber(num);
+            } else {
+                input.value = normalizeNumberString(targetText);
+            }
+        });
+    });
 }
 
 // --- Event Listeners ---
@@ -1578,4 +1723,6 @@ document.addEventListener('DOMContentLoaded', () => {
     updateUnitLabels();
     updateNetDebtDisplay();
     updateFcfPreview();
+    formatExistingCommaFields();
+    setupFocusAndPlaceholderBehavior();
 });
