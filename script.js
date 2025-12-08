@@ -192,6 +192,24 @@ function calcModePrice(params, fcf0, netDebt) {
     return equityValue / params.shares;
 }
 
+/**
+ * Binary Search: Find the first index where sortedArr[index] > value
+ * @param {Array<number>} sortedArr - Sorted array of numbers
+ * @param {number} value - Value to search for
+ * @returns {number} Index of the first element greater than value, or arr.length if not found
+ */
+function firstGreaterIndex(sortedArr, value) {
+    let lo = 0, hi = sortedArr.length;
+    while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (sortedArr[mid] <= value) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo;
+}
 
 // --- Main Simulation ---
 
@@ -365,17 +383,29 @@ async function runSimulation() {
     simulationResults = prices; // Store for download
 
     // Statistics
-    const meanPrice = mean(prices);
-    const medianPrice = percentile(prices, 0.5);
-    const p05 = percentile(prices, 0.05);
-    const p95 = percentile(prices, 0.95);
-    const prob = probAbove(prices, params.currentPrice);
+    const meanPrice = prices.reduce((a, b) => a + b, 0) / prices.length;
+    const medianPrice = prices[Math.floor(prices.length / 2)];
+    const p05 = prices[Math.floor(prices.length * 0.05)];
+    const p95 = prices[Math.floor(prices.length * 0.95)];
+
+    // Probability > Current Price (Binary Search)
+    const idxGtCurrent = firstGreaterIndex(prices, params.currentPrice);
+    const prob = ((prices.length - idxGtCurrent) / prices.length) * 100;
+
     const modePrice = calcModePrice(params, fcf0, netDebt);
 
-    const modePercentile = Number.isFinite(modePrice) ? percentileRank(prices, modePrice) : NaN;
-    const currentPercentile = percentileRank(prices, params.currentPrice);
+    // Percentile Rank of Mode DCF (Binary Search)
+    let modePercentile = null;
+    if (!isNaN(modePrice)) {
+        const idxGtMode = firstGreaterIndex(prices, modePrice);
+        modePercentile = (idxGtMode / prices.length) * 100;
+    }
 
-    // Update UI
+    // Percentile Rank of Current Price (Binary Search)
+    // Note: idxGtCurrent is the count of items <= currentPrice (if duplicates exist, it points after them)
+    // So percentile is roughly (idx / N) * 100
+    const currentPercentile = (idxGtCurrent / prices.length) * 100;
+
     // Update UI
     if (params.calcMode === 'future') {
         const displayFcf0 = fcf0 / params.unitMult;
@@ -912,37 +942,7 @@ function updateChart(prices, modePrice, currentPrice) {
 
 // --- Downloads & Prompt ---
 
-function downloadCsv() {
-    if (simulationResults.length === 0) {
-        alert("ダウンロードするデータがありません。先にシミュレーションを実行してください。");
-        return;
-    }
-    const csvContent = "simulated_prices\n" + simulationResults.join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", "dcf_simulation_results.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-}
 
-function downloadRawCSV(prices) {
-    if (!prices || prices.length === 0) {
-        alert("ダウンロードするデータがありません。先にシミュレーションを実行してください。");
-        return;
-    }
-    let csvContent = "sim_price\n" + prices.join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = "mc_prices_raw.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-}
 
 function downloadPng() {
     const canvas = document.getElementById('histogramChart');
