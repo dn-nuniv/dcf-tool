@@ -308,7 +308,10 @@ async function runSimulation() {
     }
 
     // Monte Carlo Loop (Async Chunking)
-    const prices = [];
+    // Use Float64Array for memory efficiency with high iterations (up to 10M)
+    const pricesBuffer = new Float64Array(params.iterations);
+    let validCount = 0;
+
     const chunkSize = 50000; // Process 50k iterations per frame
     let processed = 0;
 
@@ -353,7 +356,7 @@ async function runSimulation() {
                 const price = equityValue / params.shares;
 
                 if (Number.isFinite(price)) {
-                    prices.push(price);
+                    pricesBuffer[validCount++] = price;
                 }
             }
 
@@ -374,12 +377,13 @@ async function runSimulation() {
         progressContainer.classList.add('hidden');
     }
 
-    if (prices.length === 0) {
+    if (validCount === 0) {
         alert("すべてのシミュレーションが失敗しました (r <= g)。前提条件を見直してください。");
         return;
     }
 
-    prices.sort((a, b) => a - b);
+    // Shrink to valid size and sort
+    const prices = pricesBuffer.subarray(0, validCount).sort();
     simulationResults = prices; // Store for download
 
     // Statistics
@@ -594,7 +598,17 @@ function downloadRawTSV(prices) {
         alert("ダウンロードするデータがありません。先にシミュレーションを実行してください。");
         return;
     }
-    let tsvContent = "理論株価\n" + prices.map(p => p.toFixed(0)).join("\n");
+
+    if (prices.length > 100000) {
+        alert("データ量が多すぎるため（10万件超）、生データのTSVダウンロードはできません。");
+        return;
+    }
+
+    // prices is Float64Array, map returns Float64Array (numbers), but toFixed returns string.
+    // Use Array.from for small dataset (<=100k) to map to formatted strings.
+    const strValues = Array.from(prices, p => p.toFixed(0));
+    let tsvContent = "理論株価\n" + strValues.join("\n");
+
     const blob = new Blob([tsvContent], { type: 'text/tab-separated-values;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
 
@@ -944,6 +958,366 @@ function updateChart(prices, modePrice, currentPrice) {
 
 
 
+// --- Reverse DCF (Implied Analysis) ---
+
+let impliedResults = {};
+
+// Helper for max/min to avoid stack overflow
+function getMinMax(arr) {
+    let min = Infinity;
+    let max = -Infinity;
+    for (let i = 0; i < arr.length; i++) {
+        const v = arr[i];
+        if (v < min) min = v;
+        if (v > max) max = v;
+    }
+    return { min, max };
+}
+
+async function runImpliedSimulation() {
+    const params = getInputs();
+    const fcf0 = calcFcf0(params.cfoInputs, params.cfiInputs, params.fcfMethod); // Re-calculate FCF0 for consistency
+
+    // Validation
+    const commonValid = [params.gMin, params.gMode, params.gMax, params.debt, params.cash, params.shares, params.currentPrice, params.iterations].every(v => !isNaN(v));
+    if (!commonValid) {
+        alert("すべての数値を正しく入力してください。");
+        return;
+    }
+
+    // Initialize RNG
+    let rng = Math.random;
+    if (params.randomSeed && params.randomSeed !== "") {
+        let seedInt = 0;
+        const str = params.randomSeed.toString();
+        for (let i = 0; i < str.length; i++) {
+            seedInt = ((seedInt << 5) - seedInt) + str.charCodeAt(i);
+            seedInt |= 0;
+        }
+        rng = mulberry32(seedInt);
+    }
+
+    // Helper: Sleep for async
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    // Use Float64Array for memory efficiency (up to 10M iterations)
+    const impliedFcfSamples = new Float64Array(params.iterations);
+    const impliedGSamples = new Float64Array(params.iterations);
+
+    const EV_market = params.currentPrice * params.shares + (params.debt - params.cash);
+
+    // Safety check for EV
+    if (EV_market <= 0) {
+        alert("Enterprice Value (EV) がゼロ以下です。逆DCFの計算ができません。");
+        return;
+    }
+
+    const chunkSize = 20000;
+    let processed = 0;
+
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
+    const progressLabel = document.getElementById('progressLabel');
+    const runBtn = document.getElementById('runImpliedBtn');
+
+    runBtn.disabled = true;
+    progressContainer.classList.remove('hidden');
+
+    try {
+        while (processed < params.iterations) {
+            const end = Math.min(processed + chunkSize, params.iterations);
+
+            for (let i = processed; i < end; i++) {
+                const r = params.rFixedCheck
+                    ? params.rFixed
+                    : triRandom(params.rMin, params.rMode, params.rMax, rng);
+                const g = triRandom(params.gMin, params.gMode, params.gMax, rng);
+
+                // (1) Implied FCF: EV = FCF / (r-g) => FCF = EV * (r-g)
+                const valFcf = EV_market * (r - g);
+                impliedFcfSamples[i] = valFcf;
+
+                // (2) Implied g: g = r - (FCF0 / EV)
+                const valG = r - (fcf0 / EV_market);
+                impliedGSamples[i] = valG;
+            }
+
+            processed = end;
+            const pct = Math.round((processed / params.iterations) * 100);
+            progressBar.value = pct;
+            progressLabel.textContent = `${pct}%`;
+            await sleep(0);
+        }
+
+        // --- Process Results ---
+        // Create Sorted Copies for Stats (Keep originals unsorted for heatmap pairing)
+        // Use slice() to copy before sort (Float64Array.slice returns new TypedArray)
+        const fcfSorted = impliedFcfSamples.slice().sort();
+        const gSorted = impliedGSamples.slice().sort();
+
+        const fcfStats = getStats(fcfSorted);
+        const gStats = getStats(gSorted);
+
+        // Store UNSORTED raw arrays for Heatmap/TSV
+        impliedResults = {
+            fcfSamples: impliedFcfSamples,
+            gSamples: impliedGSamples,
+            fcfStats, gStats,
+            params
+        };
+
+        // Update Stats UI
+        const unitDiv = params.unitMult;
+        document.getElementById('resImpliedFcfMean').textContent = formatNumber(fcfStats.mean / unitDiv);
+        document.getElementById('resImpliedFcfMedian').textContent = formatNumber(fcfStats.median / unitDiv);
+        document.getElementById('resImpliedFcfRange').textContent = `${formatNumber(fcfStats.p05 / unitDiv)} - ${formatNumber(fcfStats.p95 / unitDiv)}`;
+
+        // For G
+        const fmtPct = (n) => (n * 100).toFixed(2) + "%";
+        document.getElementById('resImpliedGMean').textContent = fmtPct(gStats.mean);
+        document.getElementById('resImpliedGMedian').textContent = fmtPct(gStats.median);
+        document.getElementById('resImpliedGRange').textContent = `${fmtPct(gStats.p05)} - ${fmtPct(gStats.p95)}`;
+
+        // Render Charts
+        // Pass map results (new float64array) to histogram renderer
+        // Note: TypedArray map returns TypedArray.
+        renderHistogram('impliedFcfChart', impliedFcfSamples.map(v => v / unitDiv), "Implied FCF", fcf0 / unitDiv);
+        renderHistogram('impliedGChart', impliedGSamples, "Implied g", params.gMode, true);
+
+        renderImpliedHeatmap(impliedFcfSamples, impliedGSamples);
+
+    } catch (e) {
+        console.error(e);
+        alert("エラーが発生しました: " + e.message);
+    } finally {
+        runBtn.disabled = false;
+        progressContainer.classList.add('hidden');
+    }
+}
+
+function getStats(sortedArr) {
+    if (sortedArr.length === 0) return { mean: 0, median: 0, p05: 0, p95: 0 };
+    const mean = sortedArr.reduce((a, b) => a + b, 0) / sortedArr.length;
+    const median = sortedArr[Math.floor(sortedArr.length / 2)];
+    const p05 = sortedArr[Math.floor(sortedArr.length * 0.05)];
+    const p95 = sortedArr[Math.floor(sortedArr.length * 0.95)];
+    return { mean, median, p05, p95 };
+}
+
+// Reusable Histogram Renderer
+const impliedCharts = {}; // Map canvasId -> chartInstance
+
+function renderHistogram(canvasId, data, label, referenceVal, isPercent = false) {
+    const ctx = document.getElementById(canvasId).getContext('2d');
+
+    // Binning using getMinMax loop
+    const { min, max } = getMinMax(data);
+    const minVal = min;
+    const maxVal = max;
+    const range = maxVal - minVal;
+    const binCount = 30;
+    const binSize = range / binCount;
+
+    const bins = new Array(binCount).fill(0);
+    const labels = [];
+
+    // Loop based binning
+    for (let i = 0; i < data.length; i++) {
+        let idx = Math.floor((data[i] - minVal) / binSize);
+        if (idx >= binCount) idx = binCount - 1;
+        if (idx < 0) idx = 0;
+        bins[idx]++;
+    }
+
+    for (let i = 0; i < binCount; i++) {
+        const center = minVal + (i + 0.5) * binSize;
+        labels.push(isPercent ? (center * 100).toFixed(2) + "%" : center.toFixed(0));
+    }
+
+    // Destroy previous
+    if (impliedCharts[canvasId]) {
+        impliedCharts[canvasId].destroy();
+    }
+
+    const refIdx = (Number.isFinite(referenceVal) && range > 0)
+        ? Math.floor((referenceVal - minVal) / binSize)
+        : null;
+
+    impliedCharts[canvasId] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: '頻度',
+                data: bins,
+                backgroundColor: 'rgba(5, 150, 105, 0.5)',
+                borderColor: 'rgba(5, 150, 105, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                annotation: {
+                    annotations: refIdx !== null && refIdx >= 0 && refIdx < binCount ? {
+                        line1: {
+                            type: 'line',
+                            xMin: refIdx,
+                            xMax: refIdx,
+                            borderColor: 'rgb(255, 99, 132)',
+                            borderWidth: 2,
+                            label: {
+                                display: true,
+                                content: isPercent ? 'Input Mode' : 'Input FCF0',
+                                position: 'start'
+                            }
+                        }
+                    } : {}
+                },
+                legend: { display: false }
+            }
+        }
+    });
+}
+
+function renderImpliedHeatmap(fcfArr, gArr) {
+    const canvas = document.getElementById('impliedHeatmapCanvas');
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+
+    // Find ranges using helper
+    const fcfMinMax = getMinMax(fcfArr);
+    const gMinMax = getMinMax(gArr);
+    const fcfMin = fcfMinMax.min;
+    const fcfMax = fcfMinMax.max;
+    const gMin = gMinMax.min;
+    const gMax = gMinMax.max;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Binned heatmap
+    const bins = 20;
+    const grid = Array(bins).fill(0).map(() => Array(bins).fill(0));
+    const gRange = gMax - gMin || 1;
+    const fcfRange = fcfMax - fcfMin || 1;
+
+    let maxFreq = 0;
+
+    // Parallel loop
+    for (let i = 0; i < fcfArr.length; i++) {
+        const valFcf = fcfArr[i];
+        const valG = gArr[i];
+
+        let ci = Math.floor((valFcf - fcfMin) / fcfRange * bins);
+        let ri = Math.floor((valG - gMin) / gRange * bins); // g on Y axis
+        if (ci >= bins) ci = bins - 1; if (ci < 0) ci = 0;
+        if (ri >= bins) ri = bins - 1; if (ri < 0) ri = 0;
+
+        grid[ri][ci]++;
+        if (grid[ri][ci] > maxFreq) maxFreq = grid[ri][ci];
+    }
+
+    const cellW = w / bins;
+    const cellH = h / bins;
+
+    for (let i = 0; i < bins; i++) { // Y(g)
+        for (let j = 0; j < bins; j++) { // X(fcf)
+            // Y is inverted in canvas (0 top). Let's map Min G to Bottom.
+            // So row i=0 is Top (Max G).
+            const val = grid[i][j];
+            const intensity = val / maxFreq;
+            // Color: White -> Green
+            const gVal = Math.floor(255 - intensity * 150);
+            ctx.fillStyle = `rgb(${gVal}, 255, ${gVal})`;
+            if (val === 0) ctx.fillStyle = "#ffffff";
+
+            ctx.fillRect(j * cellW, i * cellH, cellW, cellH);
+        }
+    }
+
+    // Axes Text
+    ctx.fillStyle = "#000";
+    ctx.font = "12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("FCF Low", 40, h - 5);
+    ctx.fillText("FCF High", w - 40, h - 5);
+
+    ctx.save();
+    ctx.translate(15, h / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText("Growth Rate (g)", 0, 0);
+    ctx.restore();
+}
+
+function downloadHeatmapGenericTsv() {
+    if (!impliedResults.fcfSamples || !impliedResults.gSamples) {
+        alert("ヒートマップデータが見つかりません。");
+        return;
+    }
+
+    if (impliedResults.fcfSamples.length > 100000) {
+        alert("データ量が多すぎるため（10万件超）、TSVダウンロードは制限されています。");
+        return;
+    }
+
+    const fcfArr = impliedResults.fcfSamples;
+    const gArr = impliedResults.gSamples;
+
+    const bins = 20;
+
+    const fcfMinMax = getMinMax(fcfArr);
+    const gMinMax = getMinMax(gArr);
+    const fcfMin = fcfMinMax.min;
+    const fcfMax = fcfMinMax.max;
+    const gMin = gMinMax.min;
+    const gMax = gMinMax.max;
+
+    const fcfRange = fcfMax - fcfMin || 1;
+    const gRange = gMax - gMin || 1;
+
+    const grid = Array(bins).fill(0).map(() => Array(bins).fill(0));
+
+    for (let i = 0; i < fcfArr.length; i++) {
+        const valFcf = fcfArr[i];
+        const valG = gArr[i];
+
+        let c = Math.floor((valFcf - fcfMin) / fcfRange * bins);
+        let r = Math.floor((valG - gMin) / gRange * bins);
+        if (c >= bins) c = bins - 1; if (c < 0) c = 0;
+        if (r >= bins) r = bins - 1; if (r < 0) r = 0;
+        grid[r][c]++;
+    }
+
+    let tsv = "g \\ FCF\t";
+    for (let c = 0; c < bins; c++) {
+        const val = fcfMin + (c + 0.5) * (fcfRange / bins);
+        tsv += `${val.toFixed(0)}\t`;
+    }
+    tsv += "\n";
+
+    for (let r = bins - 1; r >= 0; r--) {
+        const val = gMin + (r + 0.5) * (gRange / bins);
+        tsv += `${(val * 100).toFixed(2)}%\t`;
+        for (let c = 0; c < bins; c++) {
+            tsv += `${grid[r][c]}\t`;
+        }
+        tsv += "\n";
+    }
+
+    const blob = new Blob([tsv], { type: 'text/tab-separated-values' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `implied_heatmap_matrix.tsv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+
+// --- Download Helpers ---
+
 function downloadPng() {
     const canvas = document.getElementById('histogramChart');
     if (!chartInstance) {
@@ -954,6 +1328,66 @@ function downloadPng() {
     link.download = 'dcf_histogram.png';
     link.href = canvas.toDataURL();
     link.click();
+}
+
+function downloadGenericTsv(dataArray, filenamePrefix, headerLabel) {
+    if (!dataArray || dataArray.length === 0) {
+        alert("データがありません。先にシミュレーションを実行してください。");
+        return;
+    }
+    let content = `${headerLabel}\n` + dataArray.join("\n");
+    const blob = new Blob([content], { type: 'text/tab-separated-values' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filenamePrefix}_${new Date().toISOString().slice(0, 10)}.tsv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function downloadGenericPng(canvasId, filename) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) {
+        alert("キャンバスが見つかりません。");
+        return;
+    }
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = canvas.toDataURL();
+    link.click();
+}
+
+function downloadImpliedData(type) {
+    if (!impliedResults.params) { alert("計算してください。"); return; }
+
+    // Check limit (100k)
+    // Note: fcfSamples and gSamples are TypedArrays (Float64Array) so .length is reliable
+    if (impliedResults.fcfSamples.length > 100000) {
+        alert("データ量が多すぎるため（10万件超）、生データのTSVダウンロードはできません。");
+        return;
+    }
+
+    let data, fname;
+    if (type === 'fcf') {
+        data = impliedResults.fcfSamples; // TypedArray joins same as Array
+        fname = "implied_fcf";
+    } else if (type === 'g') {
+        // .map on TypedArray returns new TypedArray, but we need formatting
+        // So we need to convert to normal array of strings or join smartly
+        // Array.from(impliedResults.gSamples, ...)
+        data = Array.from(impliedResults.gSamples, v => (v * 100).toFixed(4) + "%");
+        fname = "implied_g";
+    }
+
+    if (!data) return;
+
+    const blob = new Blob([data.join("\n")], { type: 'text/tab-separated-values' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${fname}.tsv`;
+    a.click();
+    URL.revokeObjectURL(url);
 }
 
 function generatePrompt() {
@@ -1123,6 +1557,16 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('copyPromptBtn').addEventListener('click', copyPrompt);
     document.getElementById('downloadHeatmapTsvBtn').addEventListener('click', downloadHeatmapTSV);
     document.getElementById('saveHeatmapPngBtn').addEventListener('click', saveHeatmapPNG);
+
+    // Reverse DCF Buttons
+    document.getElementById('runImpliedBtn').addEventListener('click', runImpliedSimulation);
+    document.getElementById('downloadImpliedFcfTsvBtn').addEventListener('click', () => downloadImpliedData('fcf'));
+    document.getElementById('downloadImpliedGTsvBtn').addEventListener('click', () => downloadImpliedData('g'));
+    document.getElementById('downloadImpliedFcfPngBtn').addEventListener('click', () => downloadGenericPng('impliedFcfChart', 'implied_fcf.png'));
+    document.getElementById('downloadImpliedGPngBtn').addEventListener('click', () => downloadGenericPng('impliedGChart', 'implied_g.png'));
+    document.getElementById('downloadImpliedHeatmapTsvBtn').addEventListener('click', downloadHeatmapGenericTsv);
+    document.getElementById('saveImpliedHeatmapPngBtn').addEventListener('click', () => downloadGenericPng('impliedHeatmapCanvas', 'implied_heatmap.png'));
+
 
     // Unit Select Listener
     document.getElementById('unitSelect').addEventListener('change', () => {
