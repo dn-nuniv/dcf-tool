@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Monte Carlo DCF Simulator Ver.1.0</title>
+    <title>Monte Carlo DCF Simulator Ver.2.0</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script
         src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
@@ -268,7 +268,7 @@
         <!-- Left Column: Inputs -->
         <div class="sidebar">
             <div class="card">
-                <h1>モンテカルロDCFシミュレーター Ver.1.0</h1>
+                <h1>モンテカルロDCFシミュレーター Ver.2.0</h1>
 
                 <div class="input-group">
                     <h3>(A) FCF計算 <span id="fcfHelp"
@@ -301,20 +301,15 @@
                         <label>営業CF（営業活動によるCF合計） <span class="dynamic-unit"></span></label>
                         <div class="row-inputs">
                             <input type="text" inputmode="decimal" class="cfo-input comma-format" value="100"
-                                placeholder="100"
-                                title="キャッシュフロー計算書の “営業活動によるキャッシュ・フロー” の当期合計をそのまま入力">
+                                placeholder="100" title="キャッシュフロー計算書の “営業活動によるキャッシュ・フロー” の当期合計をそのまま入力">
                             <input type="text" inputmode="decimal" class="cfo-input comma-format" value="110"
-                                placeholder="110"
-                                title="キャッシュフロー計算書の “営業活動によるキャッシュ・フロー” の当期合計をそのまま入力">
+                                placeholder="110" title="キャッシュフロー計算書の “営業活動によるキャッシュ・フロー” の当期合計をそのまま入力">
                             <input type="text" inputmode="decimal" class="cfo-input comma-format" value="120"
-                                placeholder="120"
-                                title="キャッシュフロー計算書の “営業活動によるキャッシュ・フロー” の当期合計をそのまま入力">
+                                placeholder="120" title="キャッシュフロー計算書の “営業活動によるキャッシュ・フロー” の当期合計をそのまま入力">
                             <input type="text" inputmode="decimal" class="cfo-input comma-format" value="130"
-                                placeholder="130"
-                                title="キャッシュフロー計算書の “営業活動によるキャッシュ・フロー” の当期合計をそのまま入力">
+                                placeholder="130" title="キャッシュフロー計算書の “営業活動によるキャッシュ・フロー” の当期合計をそのまま入力">
                             <input type="text" inputmode="decimal" class="cfo-input comma-format" value="140"
-                                placeholder="140"
-                                title="キャッシュフロー計算書の “営業活動によるキャッシュ・フロー” の当期合計をそのまま入力">
+                                placeholder="140" title="キャッシュフロー計算書の “営業活動によるキャッシュ・フロー” の当期合計をそのまま入力">
                         </div>
                         <label style="margin-top:8px;">有形・無形固定資産の取得額（CapEx） <span class="dynamic-unit"></span></label>
                         <div class="row-inputs">
@@ -365,11 +360,11 @@
                 <div class="input-group">
                     <h3>(B) 成長率 g (三角分布)</h3>
                     <div class="row-inputs">
-                    <div><label>最小 (Min)</label><input type="number" inputmode="decimal" id="gMin" value="0.005"
-                            step="0.001" placeholder="0.005"></div>
-                    <div><label>最頻 (Mode)</label><input type="number" inputmode="decimal" id="gMode" value="0.01"
-                            step="0.001" placeholder="0.01"></div>
-                    <div><label>最大 (Max)</label><input type="number" inputmode="decimal" id="gMax" value="0.02"
+                        <div><label>最小 (Min)</label><input type="number" inputmode="decimal" id="gMin" value="0.005"
+                                step="0.001" placeholder="0.005"></div>
+                        <div><label>最頻 (Mode)</label><input type="number" inputmode="decimal" id="gMode" value="0.01"
+                                step="0.001" placeholder="0.01"></div>
+                        <div><label>最大 (Max)</label><input type="number" inputmode="decimal" id="gMax" value="0.02"
                                 step="0.001" placeholder="0.02"></div>
                     </div>
                 </div>
@@ -393,8 +388,8 @@
 
                 <div class="input-group">
                     <h3>(D) 資本構成・株価</h3>
-                    <label>有利子負債 (Debt) <span class="dynamic-unit"></span></label><input type="text"
-                        inputmode="decimal" id="debt" class="comma-format" value="500" placeholder="500">
+                    <label>有利子負債 (Debt) <span class="dynamic-unit"></span></label><input type="text" inputmode="decimal"
+                        id="debt" class="comma-format" value="500" placeholder="500">
                     <label>現金等 (Cash) <span class="dynamic-unit"></span></label><input type="text" inputmode="decimal"
                         id="cash" class="comma-format" value="200" placeholder="200">
                     <label>発行株式数 (Shares) (株)</label><input type="text" inputmode="decimal" id="shares"
