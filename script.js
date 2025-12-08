@@ -1395,9 +1395,11 @@ function renderImpliedHeatmap(fcfArr, gArr) {
             const pct = (maxFreq / fcfArr.length) * 100;
             peakEl.textContent = `最も出現頻度の高い組み合わせ： g ≈ ${(gCenter * 100).toFixed(2)}% 、 FCF ≈ ${formatNumber(fcfCenter)} （全シナリオの ${pct.toFixed(1)}%）`;
             peakEl.classList.remove('hidden');
+            impliedResults.peak = { fcfCenter, gCenter, pct };
         } else {
             peakEl.classList.add('hidden');
             peakEl.textContent = '';
+            impliedResults.peak = null;
         }
     }
 
@@ -1605,13 +1607,19 @@ function generatePrompt() {
         const gStats = impliedResults.gStats;
         const fmtPct = (n) => (n * 100).toFixed(2) + "%";
         const fmtPctVar = (n) => (n * 100 * 100).toFixed(2) + "%²";
+        const peak = impliedResults.peak;
+        let peakLine = "最頻組み合わせ: 未計算";
+        if (peak && Number.isFinite(peak.fcfCenter) && Number.isFinite(peak.gCenter) && Number.isFinite(peak.pct)) {
+            peakLine = `最頻組み合わせ: g ≈ ${fmtPct(peak.gCenter)} / FCF ≈ ${formatNumber(peak.fcfCenter / unitDiv)} （出現率 ${peak.pct.toFixed(1)}%）`;
+        }
 
         impliedSection = [
             "逆DCF（市場が織り込む水準）:",
             `- Implied FCF: 平均=${formatNumber(fcfStats.mean / unitDiv)} / 中央値=${formatNumber(fcfStats.median / unitDiv)} / 5%-95%=${formatNumber(fcfStats.p05 / unitDiv)}～${formatNumber(fcfStats.p95 / unitDiv)}`,
             `- Implied g: 平均=${fmtPct(gStats.mean)} / 中央値=${fmtPct(gStats.median)} / 5%-95%=${fmtPct(gStats.p05)}～${fmtPct(gStats.p95)}`,
             `- 形状指標 (FCF): 標準偏差=${formatNumber(fcfStats.stdDev / unitDiv)} / 分散=${formatNumber(fcfStats.variance / (unitDiv * unitDiv))} / 歪度=${formatDecimal(fcfStats.skewness)} / 尖度(超過)=${formatDecimal(fcfStats.kurtosis)}`,
-            `- 形状指標 (g): 標準偏差=${fmtPct(gStats.stdDev)} / 分散=${fmtPctVar(gStats.variance)} / 歪度=${formatDecimal(gStats.skewness)} / 尖度(超過)=${formatDecimal(gStats.kurtosis)}`
+            `- 形状指標 (g): 標準偏差=${fmtPct(gStats.stdDev)} / 分散=${fmtPctVar(gStats.variance)} / 歪度=${formatDecimal(gStats.skewness)} / 尖度(超過)=${formatDecimal(gStats.kurtosis)}`,
+            `- ${peakLine}`
         ].join("\n");
     }
 
