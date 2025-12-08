@@ -278,8 +278,11 @@
                         style="margin-bottom:15px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
                         <label><input type="radio" name="calcMode" value="historical" checked
                                 onchange="toggleCalcMode()"> 過去平均から推計 (簡易)</label>
+                        <div style="font-size:0.8rem; color:#64748b; margin-left:20px; margin-bottom:5px;">※
+                            Gordon型の超簡略モデル</div>
                         <label><input type="radio" name="calcMode" value="future" onchange="toggleCalcMode()"> 将来予測を直接入力
                             (詳細)</label>
+                        <div style="font-size:0.8rem; color:#64748b; margin-left:20px;">※ 5年予測＋TVモデル</div>
                     </div>
 
                     <div style="margin-bottom: 15px;">
@@ -395,6 +398,8 @@
                     <h3>(E) 設定</h3>
                     <label>試行回数 (n)</label><input type="number" inputmode="numeric" id="iterations" value="10000"
                         placeholder="10000">
+                    <label>乱数シード (Seed) <span style="font-size:0.8rem; color:#64748b;">(任意)</span></label>
+                    <input type="number" inputmode="numeric" id="randomSeed" placeholder="例: 123 (固定する場合)">
                 </div>
 
                 <div style="display:flex; gap:10px;">

@@ -16,14 +16,27 @@ let lastSimulationParams = {}; // Stores params for AI prompt
 // --- Helper Functions ---
 
 /**
+ * Seeded Random Number Generator (Mulberry32)
+ */
+function mulberry32(a) {
+    return function () {
+        var t = a += 0x6D2B79F5;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    }
+}
+
+/**
  * Triangular Distribution Random Generator
  * @param {number} min 
  * @param {number} mode 
  * @param {number} max 
+ * @param {function} randomFunc - RNG function (returns 0-1)
  * @returns {number} Random value from triangular distribution
  */
-function triRandom(min, mode, max) {
-    const u = Math.random();
+function triRandom(min, mode, max, randomFunc = Math.random) {
+    const u = randomFunc();
     const c = (mode - min) / (max - min);
 
     if (u < c) {
@@ -119,13 +132,14 @@ function getInputs() {
 
     // Settings
     const iterations = parseInt(document.getElementById('iterations').value);
+    const randomSeed = document.getElementById('randomSeed').value; // String, empty if not set
 
     return {
         calcMode, cfoInputs, cfiInputs, fcfMethod, futureFcfInputs,
         gMin, gMode, gMax,
         rFixedCheck, rMin, rMode, rMax, rFixed,
         debt, cash, shares, currentPrice,
-        iterations,
+        iterations, randomSeed,
         unitMult // Store for reference if needed
     };
 }
@@ -193,7 +207,7 @@ async function runSimulation() {
     warningArea.style.display = 'none';
     warningArea.innerHTML = '';
 
-    // Validation
+    // Validation (Strict for Education)
     const commonValid = [params.gMin, params.gMode, params.gMax, params.debt, params.cash, params.shares, params.currentPrice, params.iterations].every(v => !isNaN(v));
     let modeValid = true;
 
@@ -205,6 +219,27 @@ async function runSimulation() {
 
     if (!commonValid || !modeValid) {
         alert("すべての数値を正しく入力してください。");
+        return;
+    }
+
+    if (params.shares <= 0) {
+        alert("発行株式数は 0 より大きい値を入力してください。");
+        return;
+    }
+
+    if (params.iterations > 200000) {
+        if (!confirm("試行回数が 200,000 を超えています。処理に時間がかかる可能性がありますが、続行しますか？")) {
+            return;
+        }
+    }
+
+    // Range Validation
+    if (params.gMin > params.gMode || params.gMode > params.gMax) {
+        alert("成長率(g)の設定が不正です。\nMin <= Mode <= Max となるように設定してください。");
+        return;
+    }
+    if (!params.rFixedCheck && (params.rMin > params.rMode || params.rMode > params.rMax)) {
+        alert("割引率(r)の設定が不正です。\nMin <= Mode <= Max となるように設定してください。");
         return;
     }
 
@@ -240,6 +275,20 @@ async function runSimulation() {
     progressBar.value = 0;
     progressLabel.textContent = "0%";
 
+    // Initialize RNG
+    let rng = Math.random;
+    if (params.randomSeed) {
+        // Simple hash of the seed string to integer
+        let seedInt = 0;
+        const str = params.randomSeed.toString();
+        for (let i = 0; i < str.length; i++) {
+            seedInt = ((seedInt << 5) - seedInt) + str.charCodeAt(i);
+            seedInt |= 0; // Convert to 32bit integer
+        }
+        // Use Mulberry32 with the hashed seed
+        rng = mulberry32(seedInt);
+    }
+
     // Monte Carlo Loop (Async Chunking)
     const prices = [];
     const chunkSize = 50000; // Process 50k iterations per frame
@@ -253,12 +302,12 @@ async function runSimulation() {
             const end = Math.min(processed + chunkSize, params.iterations);
 
             for (let i = processed; i < end; i++) {
-                const g = triRandom(params.gMin, params.gMode, params.gMax);
+                const g = triRandom(params.gMin, params.gMode, params.gMax, rng);
                 let r;
                 if (params.rFixedCheck) {
                     r = params.rFixed;
                 } else {
-                    r = triRandom(params.rMin, params.rMode, params.rMax);
+                    r = triRandom(params.rMin, params.rMode, params.rMax, rng);
                 }
 
                 if (r - g <= 0.0001) {
@@ -488,26 +537,42 @@ function saveHeatmapPNG() {
 
 
 
-function downloadRawCSV() {
+function downloadSummaryTSV() {
     if (simulationResults.length === 0) {
         alert("シミュレーションを実行してください。");
         return;
     }
 
     // Convert to TSV
-    let content = "理論株価\n";
-    simulationResults.forEach(val => {
-        content += `${val.toFixed(0)}\n`;
+    let tsvContent = "理論株価\n";
+    simulationResults.forEach(row => {
+        tsvContent += `${row.toFixed(0)}\n`;
     });
 
-    const blob = new Blob([content], { type: 'text/tab-separated-values;charset=utf-8;' });
+    const blob = new Blob([tsvContent], { type: 'text/tab-separated-values;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", "raw_simulation_data.tsv");
+    link.setAttribute("download", "dcf_simulation_summary.tsv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+}
+
+function downloadRawTSV(prices) {
+    if (!prices || prices.length === 0) {
+        alert("ダウンロードするデータがありません。先にシミュレーションを実行してください。");
+        return;
+    }
+    let tsvContent = "理論株価\n" + prices.map(p => p.toFixed(0)).join("\n");
+    const blob = new Blob([tsvContent], { type: 'text/tab-separated-values;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = "dcf_simulation_raw.tsv";
+    a.click();
+    URL.revokeObjectURL(url);
 }
 
 function updateSensitivityTable(fcf0, params) {
@@ -1014,30 +1079,9 @@ function resetInputs(e) {
 
 document.addEventListener('DOMContentLoaded', () => {
     // Force numeric fields to reject non-numeric input (helps prevent IME usage)
-    document.querySelectorAll('input[type="number"]').forEach(input => {
-        input.addEventListener('keydown', (e) => {
-            // Allow: backspace, delete, tab, escape, enter, decimal point
-            if ([46, 8, 9, 27, 13, 110, 190].indexOf(e.keyCode) !== -1 ||
-                // Allow: Ctrl+A, Command+A
-                (e.keyCode === 65 && (e.ctrlKey === true || e.metaKey === true)) ||
-                // Allow: home, end, left, right, down, up
-                (e.keyCode >= 35 && e.keyCode <= 40)) {
-                return;
-            }
-            // Ensure that it is a number and stop the keypress
-            if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
-                e.preventDefault();
-            }
-        });
-
-        // Also prevent paste of non-numeric text
-        input.addEventListener('paste', (e) => {
-            const text = (e.clipboardData || window.clipboardData).getData('text');
-            if (!/^-?\d*\.?\d*$/.test(text)) {
-                e.preventDefault();
-            }
-        });
-    });
+    // Force numeric fields to reject non-numeric input (helps prevent IME usage)
+    // Removed restrictive keydown/paste listeners to allow negative numbers and easier editing.
+    // Validation is handled in runSimulation.
 
     // Input listeners for live updates
     document.querySelectorAll('input').forEach(input => {
@@ -1072,8 +1116,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Buttons
     document.getElementById('runMcBtn').addEventListener('click', runSimulation);
     document.getElementById('resetBtn').addEventListener('click', resetInputs);
-    document.getElementById('downloadCsvBtn').addEventListener('click', downloadCsv);
-    document.getElementById('downloadRawBtn').addEventListener('click', () => downloadRawCSV(simulationResults));
+    document.getElementById('downloadCsvBtn').addEventListener('click', downloadSummaryTSV);
+    document.getElementById('downloadRawBtn').addEventListener('click', () => downloadRawTSV(simulationResults));
     document.getElementById('downloadPngBtn').addEventListener('click', downloadPng);
     document.getElementById('generatePromptBtn').addEventListener('click', generatePrompt);
     document.getElementById('copyPromptBtn').addEventListener('click', copyPrompt);
