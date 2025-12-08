@@ -148,7 +148,7 @@ DCFや逆DCFは専門性が高く、一般的な説明だけでは十分に伝�
 
 各シミュレーション試行ごとに：
 
-```text
+```
 FCF₁ = FCF₀ × (1 + g)
 TV   = FCF₁ / (r − g)
 Equity Value = TV − Net Debt
