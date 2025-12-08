@@ -154,6 +154,7 @@ TV   = FCF₁ / (r − g)
 Equity Value = TV − Net Debt
 Stock Price  = Equity Value / Shares
 ```
+
 	•	不正試行（r ≤ g）は除外。
 	•	試行結果（通常 10,000 回以上）から統計量および分布を生成。
 
