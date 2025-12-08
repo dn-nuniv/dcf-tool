@@ -509,6 +509,85 @@
             </div>
 
             <div class="card">
+                <h2>逆DCF分析 (Market Implied)</h2>
+                <p style="font-size:0.85rem; color:#64748b; margin-bottom:15px;">
+                    現在株価と資本構成（EV）から、市場が織り込んでいる「将来FCF」や「永久成長率(g)」を逆算します。<br>
+                    ※ 割引率(r) と 成長率(g) の分布前提は左側の入力を使用します。
+                </p>
+
+                <div class="actions" style="margin-bottom: 25px;">
+                    <button type="button" id="runImpliedBtn" style="background-color: #059669;">逆DCFシミュレーション実行</button>
+                </div>
+
+                <!-- Implied FCF -->
+                <h3 style="border-left: 4px solid #059669; padding-left: 10px;">(1) Implied FCF (市場機待FCF)</h3>
+                <div class="results-grid">
+                    <div class="result-item">
+                        <div class="result-label">平均 (Mean) <span class="dynamic-unit"></span></div>
+                        <div class="result-value" id="resImpliedFcfMean">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">中央値 (Median) <span class="dynamic-unit"></span></div>
+                        <div class="result-value" id="resImpliedFcfMedian">-</div>
+                    </div>
+                    <div class="result-item" style="grid-column: span 2;">
+                        <div class="result-label">5% - 95% レンジ</div>
+                        <div class="result-value" id="resImpliedFcfRange">-</div>
+                    </div>
+                </div>
+                <div class="chart-container" style="height: 300px;">
+                    <canvas id="impliedFcfChart"></canvas>
+                </div>
+                <div class="actions">
+                    <button type="button" class="secondary" id="downloadImpliedFcfTsvBtn">TSVダウンロード</button>
+                    <button type="button" class="secondary" id="downloadImpliedFcfPngBtn">画像保存</button>
+                </div>
+
+                <hr style="margin: 30px 0; border: 0; border-top: 1px solid #e2e8f0;">
+
+                <!-- Implied g -->
+                <h3 style="border-left: 4px solid #059669; padding-left: 10px;">(2) Implied g (市場期待成長率)</h3>
+                <p style="font-size:0.8em; color:#64748b;">(前提: 入力されたFCFが正解だと仮定した場合の成長率)</p>
+                <div class="results-grid">
+                    <div class="result-item">
+                        <div class="result-label">平均 (Mean)</div>
+                        <div class="result-value" id="resImpliedGMean">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">中央値 (Median)</div>
+                        <div class="result-value" id="resImpliedGMedian">-</div>
+                    </div>
+                    <div class="result-item" style="grid-column: span 2;">
+                        <div class="result-label">5% - 95% レンジ</div>
+                        <div class="result-value" id="resImpliedGRange">-</div>
+                    </div>
+                </div>
+                <div class="chart-container" style="height: 300px;">
+                    <canvas id="impliedGChart"></canvas>
+                </div>
+                <div class="actions">
+                    <button type="button" class="secondary" id="downloadImpliedGTsvBtn">TSVダウンロード</button>
+                    <button type="button" class="secondary" id="downloadImpliedGPngBtn">画像保存</button>
+                </div>
+
+                <hr style="margin: 30px 0; border: 0; border-top: 1px solid #e2e8f0;">
+
+                <!-- Heatmap -->
+                <h3 style="border-left: 4px solid #059669; padding-left: 10px;">(3) Implied g vs FCF 分布</h3>
+                <p style="font-size:0.8rem; color:#64748b; margin-bottom:10px;">市場価格を正当化する「成長率(g)」と「FCF」の組み合わせ分布</p>
+
+                <div style="text-align: center; position: relative;">
+                    <canvas id="impliedHeatmapCanvas" width="500" height="400"
+                        style="background:#fff; cursor:crosshair; border:1px solid #e2e8f0; max-width:100%; height:auto;"></canvas>
+                </div>
+
+                <div class="actions" style="justify-content: center; margin-top: 10px;">
+                    <button type="button" class="secondary" id="downloadImpliedHeatmapTsvBtn">TSVダウンロード</button>
+                    <button type="button" class="secondary" id="saveImpliedHeatmapPngBtn">画像保存</button>
+                </div>
+            </div>
+
+            <div class="card">
                 <h2>AI解説プロンプト生成</h2>
                 <div class="actions">
                     <button type="button" id="generatePromptBtn">解説用プロンプト生成</button>

@@ -9,9 +9,12 @@
  */
 
 // --- Global State ---
-let chartInstance = null;
+// --- Global State ---
+let chartInstances = {}; // Map to store chart instances by canvasId
 let simulationResults = []; // Stores valid price results
 let lastSimulationParams = {}; // Stores params for AI prompt
+let impliedResults = {}; // Stores implied simulation results
+
 
 // --- Helper Functions ---
 
@@ -736,22 +739,31 @@ function updateFineGrainedHeatmap(fcf0, params, globalMin, globalMax) {
 
 // --- Charting ---
 
-function updateChart(prices, modePrice, currentPrice) {
-    const ctx = document.getElementById('histogramChart').getContext('2d');
+// --- Charting ---
+
+function renderHistogram(canvasId, values, labelsObj, options = {}) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
 
     // Create bins
     const binCount = 30;
-    const minVal = prices[0];
-    const maxVal = prices[prices.length - 1];
+    const minVal = Math.min(...values);
+    const maxVal = Math.max(...values);
     const range = maxVal - minVal;
-    const binSize = range / binCount;
 
+    if (range <= 0) {
+        // Handle single value case
+        // Just show a simple bar
+    }
+
+    const binSize = range / binCount;
     const bins = new Array(binCount).fill(0);
     const labels = [];
 
     // Fill bins
-    prices.forEach(p => {
-        let idx = Math.floor((p - minVal) / binSize);
+    values.forEach(v => {
+        let idx = Math.floor((v - minVal) / binSize);
         if (idx >= binCount) idx = binCount - 1;
         bins[idx]++;
     });
@@ -759,7 +771,7 @@ function updateChart(prices, modePrice, currentPrice) {
     // Generate labels (bin centers)
     for (let i = 0; i < binCount; i++) {
         const center = minVal + (i + 0.5) * binSize;
-        labels.push(center.toFixed(0));
+        labels.push(center.toLocaleString(undefined, { maximumFractionDigits: options.fractionDigits || 0 }));
     }
 
     const idxForValue = (value) => {
@@ -770,22 +782,48 @@ function updateChart(prices, modePrice, currentPrice) {
         return idx;
     };
 
-    const currentIdx = idxForValue(currentPrice);
-    const modeIdx = idxForValue(modePrice);
-
-    if (chartInstance) {
-        chartInstance.destroy();
+    const annotations = {};
+    if (labelsObj.current !== undefined) {
+        const idx = idxForValue(labelsObj.current);
+        if (idx !== null) {
+            annotations.line1 = {
+                type: 'line',
+                xMin: idx,
+                xMax: idx,
+                borderColor: 'rgb(255, 99, 132)',
+                borderWidth: 2,
+                label: { display: true, content: labelsObj.currentLabel || '現在値', position: 'start' }
+            };
+        }
+    }
+    if (labelsObj.mode !== undefined) {
+        const idx = idxForValue(labelsObj.mode);
+        if (idx !== null) {
+            annotations.line2 = {
+                type: 'line',
+                xMin: idx,
+                xMax: idx,
+                borderColor: 'rgb(75, 192, 192)',
+                borderWidth: 2,
+                borderDash: [6, 6],
+                label: { display: true, content: labelsObj.modeLabel || 'Mode', position: 'end' }
+            };
+        }
     }
 
-    chartInstance = new Chart(ctx, {
+    if (chartInstances[canvasId]) {
+        chartInstances[canvasId].destroy();
+    }
+
+    chartInstances[canvasId] = new Chart(ctx, {
         type: 'bar',
         data: {
             labels: labels,
             datasets: [{
                 label: '頻度',
                 data: bins,
-                backgroundColor: 'rgba(37, 99, 235, 0.5)',
-                borderColor: 'rgba(37, 99, 235, 1)',
+                backgroundColor: options.color || 'rgba(37, 99, 235, 0.5)',
+                borderColor: options.borderColor || 'rgba(37, 99, 235, 1)',
                 borderWidth: 1,
                 barPercentage: 1.0,
                 categoryPercentage: 1.0
@@ -795,57 +833,285 @@ function updateChart(prices, modePrice, currentPrice) {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                annotation: {
-                    annotations: {
-                        line1: currentIdx !== null ? {
-                            type: 'line',
-                            xMin: currentIdx,
-                            xMax: currentIdx,
-                            borderColor: 'rgb(255, 99, 132)',
-                            borderWidth: 2,
-                            label: {
-                                display: true,
-                                content: '現在株価',
-                                position: 'start'
-                            }
-                        } : undefined,
-                        line2: modeIdx !== null ? {
-                            type: 'line',
-                            xMin: modeIdx,
-                            xMax: modeIdx,
-                            borderColor: 'rgb(75, 192, 192)',
-                            borderWidth: 2,
-                            borderDash: [6, 6],
-                            label: {
-                                display: true,
-                                content: 'モードDCF',
-                                position: 'end'
-                            }
-                        } : undefined
-                    }
-                },
+                annotation: { annotations: annotations },
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        title: (items) => `株価: ~${items[0].label}`
+                        title: (items) => `${options.xLabel || '値'}: ~${items[0].label}`
                     }
                 }
             },
             scales: {
                 x: {
-                    title: { display: true, text: '理論株価' },
+                    title: { display: !!options.xLabel, text: options.xLabel || '' },
                     ticks: { maxTicksLimit: 10 }
                 },
                 y: {
                     title: { display: true, text: '頻度' },
-                    suggestedMax: Math.max(...bins) * 1.2 // Add 20% padding at the top
+                    suggestedMax: Math.max(...bins) * 1.2
                 }
             }
         }
     });
 }
 
-// --- Downloads & Prompt ---
+function updateChart(prices, modePrice, currentPrice) {
+    renderHistogram('histogramChart', prices, {
+        current: currentPrice,
+        currentLabel: '現在株価',
+        mode: modePrice,
+        modeLabel: 'モードDCF'
+    }, {
+        xLabel: '理論株価(円)'
+    });
+}
+
+// --- Reverse DCF Logic ---
+
+async function runImpliedSimulation() {
+    const params = getInputs();
+    const btn = document.getElementById('runImpliedBtn');
+
+    // Basic Validation
+    const commonValid = [params.gMin, params.gMode, params.gMax, params.debt, params.cash, params.shares, params.currentPrice, params.iterations].every(v => !isNaN(v));
+    if (!commonValid) {
+        alert("基本的な数値を正しく入力してください（現在株価、資本構成、成長率、割引率など）。");
+        return;
+    }
+
+    // Determine FCF0 for Implied g calculation
+    let fcf0 = 0;
+    if (params.calcMode === 'historical') {
+        fcf0 = calcFcf0(params.cfoInputs, params.cfiInputs, params.fcfMethod);
+    } else {
+        // Even in future mode, we need a representative FCF for simple implied g calc.
+        // We will use the last year's FCF as a proxy or just the simple perpetuity assumption.
+        // User spec says: "use representative value like fcfMode". 
+        // We will use the Year 5 FCF as the closest proxy for perpetuity base.
+        fcf0 = params.futureFcfInputs[params.futureFcfInputs.length - 1];
+    }
+
+    // EV Market
+    const netDebt = params.debt - params.cash;
+    const marketCap = params.currentPrice * params.shares;
+    const evMarket = marketCap + netDebt;
+
+    if (evMarket <= 0) {
+        alert("EV (企業価値) が 0以下です。逆算ができません。");
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = "計算中...";
+
+    // Simulation Arrays
+    const impliedFcfSamples = [];
+    const impliedGSamples = [];
+    const impliedHeatmapData = []; // Store pairs for heatmap {g, fcf}
+
+    // Async Loop
+    const chunkSize = 50000;
+    let processed = 0;
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    try {
+        while (processed < params.iterations) {
+            const end = Math.min(processed + chunkSize, params.iterations);
+            for (let i = processed; i < end; i++) {
+                // Sample r and g
+                const g = triRandom(params.gMin, params.gMode, params.gMax);
+                let r;
+                if (params.rFixedCheck) {
+                    r = params.rFixed;
+                } else {
+                    r = triRandom(params.rMin, params.rMode, params.rMax);
+                }
+
+                // 1. Implied FCF (assuming this g and r are correct)
+                // Formula: implied_fcf = EV * (r - g)
+                const impFcf = evMarket * (r - g);
+                impliedFcfSamples.push(impFcf);
+
+                // 2. Implied g (assuming this r and input FCF0 are correct)
+                // Formula: implied_g = r - FCF0 / EV
+                // Note: If FCF0 is negative, this formula technically works mathematically but meaning is weird.
+                const impG = r - (fcf0 / evMarket);
+                impliedGSamples.push(impG);
+
+                // 3. For Heatmap, we want to see relationship.
+                // Usually Heatmap is "Implied Price" for (g, r). 
+                // Creating Implied g vs Implied FCF heatmap.
+                // We just store pairs.
+                impliedHeatmapData.push({ g: impG, fcf: impFcf });
+            }
+            processed = end;
+            await sleep(0);
+        }
+
+        // --- Processing Results ---
+        impliedFcfSamples.sort((a, b) => a - b);
+        impliedGSamples.sort((a, b) => a - b); // Sorting for stats
+
+        // Helper for stats
+        const getStats = (arr) => ({
+            mean: mean(arr),
+            median: percentile(arr, 0.5),
+            p05: percentile(arr, 0.05),
+            p95: percentile(arr, 0.95)
+        });
+
+        const fcfStats = getStats(impliedFcfSamples);
+        const gStats = getStats(impliedGSamples);
+
+        // Store results globally
+        impliedResults = {
+            fcfSamples: impliedFcfSamples,
+            gSamples: impliedGSamples,
+            heatmapPairs: impliedHeatmapData,
+            fcfStats, gStats,
+            evMarket, fcf0,
+            params
+        };
+
+        // --- Render UI ---
+
+        // 1. Implied FCF
+        document.getElementById('resImpliedFcfMean').textContent = formatNumber(fcfStats.mean);
+        document.getElementById('resImpliedFcfMedian').textContent = formatNumber(fcfStats.median);
+        document.getElementById('resImpliedFcfRange').textContent = `${formatNumber(fcfStats.p05)} - ${formatNumber(fcfStats.p95)}`;
+
+        renderHistogram('impliedFcfChart', impliedFcfSamples, {
+            mode: fcf0,
+            modeLabel: '入力FCF' // Show where the input FCF stands in the implied distribution
+        }, {
+            xLabel: 'Implied FCF',
+            color: 'rgba(5, 150, 105, 0.5)',
+            borderColor: 'rgba(5, 150, 105, 1)'
+        });
+
+        // 2. Implied g
+        const fmtPct = (n) => (n * 100).toFixed(2) + '%';
+        document.getElementById('resImpliedGMean').textContent = fmtPct(gStats.mean);
+        document.getElementById('resImpliedGMedian').textContent = fmtPct(gStats.median);
+        document.getElementById('resImpliedGRange').textContent = `${fmtPct(gStats.p05)} - ${fmtPct(gStats.p95)}`;
+
+        renderHistogram('impliedGChart', impliedGSamples, {
+            mode: params.gMode,
+            modeLabel: '入力g'
+        }, {
+            xLabel: 'Implied g',
+            fractionDigits: 2,
+            color: 'rgba(5, 150, 105, 0.5)',
+            borderColor: 'rgba(5, 150, 105, 1)'
+        });
+
+        // 3. Heatmap (Implied g vs Implied FCF)
+        // We will create a 2D binning of the samples we just generated.
+        renderImpliedHeatmap(impliedFcfSamples, impliedGSamples, impliedHeatmapData);
+
+    } catch (e) {
+        console.error(e);
+        alert("逆DCF計算中にエラーが発生しました。");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "逆DCFシミュレーション実行";
+    }
+}
+
+function renderImpliedHeatmap(fcfArr, gArr, dataPairs) {
+    const canvas = document.getElementById('impliedHeatmapCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+
+    // Define Bins
+    const bins = 20; // 20x20
+    const margin = 40;
+    const chartW = width - margin * 2;
+    const chartH = height - margin * 2;
+
+    const fcfMin = fcfArr[0]; // Sorted
+    const fcfMax = fcfArr[fcfArr.length - 1];
+    const gMin = gArr[0];
+    const gMax = gArr[gArr.length - 1];
+
+    const fcfRange = fcfMax - fcfMin || 1;
+    const gRange = gMax - gMin || 1;
+
+    // Initialize Grid
+    const grid = Array(bins).fill(0).map(() => Array(bins).fill(0));
+    let maxCount = 0;
+
+    // Binning
+    for (let i = 0; i < dataPairs.length; i++) {
+        const d = dataPairs[i];
+        let fcfIdx = Math.floor((d.fcf - fcfMin) / fcfRange * bins);
+        let gIdx = Math.floor((d.g - gMin) / gRange * bins);
+
+        if (fcfIdx >= bins) fcfIdx = bins - 1;
+        if (gIdx >= bins) gIdx = bins - 1;
+        if (fcfIdx < 0) fcfIdx = 0;
+        if (gIdx < 0) gIdx = 0;
+
+        grid[gIdx][fcfIdx]++; // row=g, col=fcf
+        if (grid[gIdx][fcfIdx] > maxCount) maxCount = grid[gIdx][fcfIdx];
+    }
+
+    // Draw
+    ctx.clearRect(0, 0, width, height);
+
+    // Axes
+    ctx.strokeStyle = '#64748b';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(margin, margin); // Top-left
+    ctx.lineTo(margin, height - margin); // Bottom-left
+    ctx.lineTo(width - margin, height - margin); // Bottom-right
+    ctx.stroke();
+
+    // Labels
+    ctx.fillStyle = '#000';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Implied FCF', width / 2, height - 10);
+
+    ctx.save();
+    ctx.translate(15, height / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText('Implied g', 0, 0);
+    ctx.restore();
+
+    // Min/Max Labels
+    ctx.fillText(formatNumber(fcfMin), margin, height - 25);
+    ctx.fillText(formatNumber(fcfMax), width - margin, height - 25);
+
+    ctx.textAlign = 'right';
+    ctx.fillText((gMax * 100).toFixed(1) + '%', margin - 5, margin + 10);
+    ctx.fillText((gMin * 100).toFixed(1) + '%', margin - 5, height - margin);
+
+    // Cells
+    const cellW = chartW / bins;
+    const cellH = chartH / bins;
+
+    for (let r = 0; r < bins; r++) { // g rows (0 is bottom visually? No, 0 is min usually)
+        // We mapped 0->min. In canvas Y, height is max index. 
+        // Let's make row 0 be Bottom (gMin). 
+        // Canvas Y: height - margin - (r+1)*cellH
+
+        for (let c = 0; c < bins; c++) { // fcf cols
+            const count = grid[r][c];
+            if (count === 0) continue;
+
+            const x = margin + c * cellW;
+            const y = (height - margin) - (r + 1) * cellH; // Draw upwards
+
+            const alpha = count / maxCount;
+            ctx.fillStyle = `rgba(5, 150, 105, ${Math.max(0.1, alpha)})`; // Green base
+            ctx.fillRect(x, y, cellW, cellH);
+        }
+    }
+}
 
 function downloadCsv() {
     if (simulationResults.length === 0) {
@@ -891,6 +1157,116 @@ function downloadPng() {
     link.click();
 }
 
+// --- Generic Download Helpers ---
+
+function downloadGenericTsv(dataArray, filenamePrefix, headerLabel) {
+    if (!dataArray || dataArray.length === 0) {
+        alert("データがありません。先にシミュレーションを実行してください。");
+        return;
+    }
+    let content = `${headerLabel}\n` + dataArray.join("\n");
+    const blob = new Blob([content], { type: 'text/tab-separated-values' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filenamePrefix}_${new Date().toISOString().slice(0, 10)}.tsv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function downloadGenericPng(canvasId, filename) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) {
+        alert("キャンバスが見つかりません。");
+        return;
+    }
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = canvas.toDataURL();
+    link.click();
+}
+
+function downloadHeatmapGenericTsv() {
+    if (!impliedResults.fcfSamples || impliedResults.fcfSamples.length === 0) {
+        alert("データがありません。");
+        return;
+    }
+
+    // Re-binning for TSV (matching visual heatmap)
+    // Actually we can just dump the raw pairs or the binned grid.
+    // User requested: "10x10 cross table". 
+    // Wait, my heatmap code uses 20x20. I should stick to consistent binning.
+    // Let's output the grid matrix.
+
+    // We need to re-calc grid or expose it. I'll re-calc locally to keep it simple self-contained.
+    const samples = impliedResults; // {fcfSamples, gSamples} but we need pairs?
+    // Start IMPLIED LOGIC again? No, I stored `impliedHeatmapData` only locally in `runImpliedSimulation`.
+    // I need to store `impliedHeatmapData` globally to support TSV download correctly.
+    // FIX: Update runImpliedSimulation to store pairs in impliedResults.
+
+    // For now, I will use the locally stored separate arrays? No, pairs are needed for correlation.
+    // Assuming I fix runImpliedSimulation to store `heatmapPairs`.
+
+    if (!impliedResults.heatmapPairs) {
+        // Fallback if not stored (should fix in runImpliedSimulation)
+        alert("ヒートマップデータが見つかりません。");
+        return;
+    }
+
+    const pairs = impliedResults.heatmapPairs;
+    const bins = 20;
+
+    // Ranges from samples
+    const fcfMin = impliedResults.fcfSamples[0];
+    const fcfMax = impliedResults.fcfSamples[impliedResults.fcfSamples.length - 1];
+    const gMin = impliedResults.gSamples[0];
+    const gMax = impliedResults.gSamples[impliedResults.gSamples.length - 1];
+    const fcfRange = fcfMax - fcfMin || 1;
+    const gRange = gMax - gMin || 1;
+
+    // Grid gen
+    const grid = Array(bins).fill(0).map(() => Array(bins).fill(0));
+    pairs.forEach(d => {
+        let c = Math.floor((d.fcf - fcfMin) / fcfRange * bins);
+        let r = Math.floor((d.g - gMin) / gRange * bins);
+        if (c >= bins) c = bins - 1; if (c < 0) c = 0;
+        if (r >= bins) r = bins - 1; if (r < 0) r = 0;
+        grid[r][c]++;
+    });
+
+    let tsv = "g \\ FCF\t";
+    // Header (FCF centers/ranges)
+    for (let c = 0; c < bins; c++) {
+        const val = fcfMin + (c + 0.5) * (fcfRange / bins);
+        tsv += `${val.toFixed(0)}\t`;
+    }
+    tsv += "\n";
+
+    // Rows (g)
+    for (let r = bins - 1; r >= 0; r--) { // Top is Max g
+        const val = gMin + (r + 0.5) * (gRange / bins);
+        tsv += `${(val * 100).toFixed(2)}%\t`;
+
+        for (let c = 0; c < bins; c++) {
+            tsv += `${grid[r][c]}\t`;
+        }
+        tsv += "\n";
+    }
+
+    const blob = new Blob([tsv], { type: 'text/tab-separated-values' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `implied_heatmap_matrix.tsv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function updateImpliedPairs(pairs) {
+    if (!impliedResults) impliedResults = {};
+    impliedResults.heatmapPairs = pairs;
+}
+
 function generatePrompt() {
     if (!lastSimulationParams.params) {
         alert("先にシミュレーションを実行してください。");
@@ -909,9 +1285,10 @@ function generatePrompt() {
         fcfDesc = `- 基準年FCF（推計）：${fcf0.toFixed(2)}`;
     }
 
-    const text = `
-以下の前提でモンテカルロDCFシミュレーションを行いました。
-前提：
+    let text = `
+以下のMonte Carlo DCF / 逆DCF 分析結果をもとに、企業価値と現在株価について解説してください。
+
+【前提条件】
 - 計算モード: ${params.calcMode === 'future' ? '詳細（将来予測入力）' : '簡易（過去平均）'}
 ${fcfDesc}
 - 永続成長率 g（三角分布）：min = ${(params.gMin * 100).toFixed(2)}%, mode = ${(params.gMode * 100).toFixed(2)}%, max = ${(params.gMax * 100).toFixed(2)}%
@@ -921,19 +1298,37 @@ ${fcfDesc}
 - 発行株式数： ${params.shares}
 - 現在株価： ${params.currentPrice}
 
-結果（理論株価）：
+【DCFシミュレーション結果（理論株価）】
 - モードDCF（g=mode, r=mode）： ${isNaN(modePrice) ? "N/A" : modePrice.toFixed(0)}
 - 分布の平均： ${meanPrice.toFixed(0)}
 - 分布の中央値： ${medianPrice.toFixed(0)}
 - 5％点～95％点： ${p05.toFixed(0)} ～ ${p95.toFixed(0)}
 - 現在株価を上回る確率： ${prob.toFixed(1)}%
+- 現在株価の分布上の位置： ${Number.isFinite(currentPercentile) ? currentPercentile.toFixed(1) + "%" : "N/A"}`;
 
-- モードDCFの位置（理論価格分布の中のパーセンタイル）： ${Number.isFinite(modePercentile) ? modePercentile.toFixed(1) + "%" : "N/A"}
-- 現在株価の位置（理論価格分布の中のパーセンタイル）： ${Number.isFinite(currentPercentile) ? currentPercentile.toFixed(1) + "%" : "N/A"}
+    // Append Implied Results if available
+    if (impliedResults && impliedResults.fcfStats) {
+        const iFcf = impliedResults.fcfStats;
+        const iG = impliedResults.gStats;
 
-これらの結果を踏まえて、投資家向けにわかりやすい言葉で、
-企業価値評価とリスク・不確実性について解説してください。
-    `.trim();
+        text += `\n\n【逆DCF分析（市場が織り込む期待値）】
+※ 現在株価(${params.currentPrice})を正当化するための前提条件の分布
+1. Implied FCF (市場期待キャッシュフロー)
+   - 平均: ${iFcf.mean.toFixed(0)}
+   - 中央値: ${iFcf.median.toFixed(0)}
+   - 90%レンジ: ${iFcf.p05.toFixed(0)} ～ ${iFcf.p95.toFixed(0)}
+
+2. Implied g (市場期待成長率)
+   - 平均: ${(iG.mean * 100).toFixed(2)}%
+   - 中央値: ${(iG.median * 100).toFixed(2)}%
+   - 90%レンジ: ${(iG.p05 * 100).toFixed(2)}% ～ ${(iG.p95 * 100).toFixed(2)}%
+   
+ヒートマップ分析:
+Implied g vs FCF の相関分布を分析し、現在の株価が「高い成長率」に依存しているか、「高いキャッシュフロー」に依存しているかを考察してください。`;
+    }
+
+    text += `\n\nこれらの結果を踏まえて、投資家向けにわかりやすい言葉で、
+企業価値評価とリスク・不確実性、および市場の期待値（割高・割安感）について解説してください。`;
 
     document.getElementById('promptOutput').value = text;
 }
@@ -995,10 +1390,13 @@ function resetInputs(e) {
     document.getElementById('sensitivityTable').innerHTML = "";
     document.getElementById('heatmapContainer').style.display = 'none';
 
-    if (chartInstance) {
-        chartInstance.destroy();
-        chartInstance = null;
-    }
+    // Reset charts
+    Object.keys(chartInstances).forEach(id => {
+        if (chartInstances[id]) {
+            chartInstances[id].destroy();
+        }
+    });
+    chartInstances = {};
 
     // Reset internal state
     simulationResults = [];
@@ -1079,6 +1477,15 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('copyPromptBtn').addEventListener('click', copyPrompt);
     document.getElementById('downloadHeatmapTsvBtn').addEventListener('click', downloadHeatmapTSV);
     document.getElementById('saveHeatmapPngBtn').addEventListener('click', saveHeatmapPNG);
+
+    // Reverse DCF Buttons
+    document.getElementById('runImpliedBtn').addEventListener('click', runImpliedSimulation);
+    document.getElementById('downloadImpliedFcfTsvBtn').addEventListener('click', () => downloadGenericTsv(impliedResults.fcfSamples, "implied_fcf", "Implied FCF"));
+    document.getElementById('downloadImpliedGTsvBtn').addEventListener('click', () => downloadGenericTsv(impliedResults.gSamples, "implied_g", "Implied g (decimal)"));
+    document.getElementById('downloadImpliedFcfPngBtn').addEventListener('click', () => downloadGenericPng('impliedFcfChart', 'implied_fcf_dist.png'));
+    document.getElementById('downloadImpliedGPngBtn').addEventListener('click', () => downloadGenericPng('impliedGChart', 'implied_g_dist.png'));
+    document.getElementById('saveImpliedHeatmapPngBtn').addEventListener('click', () => downloadGenericPng('impliedHeatmapCanvas', 'implied_heatmap.png'));
+    document.getElementById('downloadImpliedHeatmapTsvBtn').addEventListener('click', downloadHeatmapGenericTsv);
 
     // Unit Select Listener
     document.getElementById('unitSelect').addEventListener('change', () => {
