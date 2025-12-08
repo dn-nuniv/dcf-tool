@@ -1121,13 +1121,15 @@ async function runImpliedSimulation() {
     const chunkSize = 20000;
     let processed = 0;
 
-    const progressContainer = document.getElementById('progressContainer');
-    const progressBar = document.getElementById('progressBar');
-    const progressLabel = document.getElementById('progressLabel');
+    const progressContainer = document.getElementById('progressContainerImplied');
+    const progressBar = document.getElementById('progressBarImplied');
+    const progressLabel = document.getElementById('progressLabelImplied');
     const runBtn = document.getElementById('runImpliedBtn');
 
     runBtn.disabled = true;
     progressContainer.classList.remove('hidden');
+    if (progressBar) progressBar.value = 0;
+    if (progressLabel) progressLabel.textContent = "0%";
 
     try {
         while (processed < params.iterations) {

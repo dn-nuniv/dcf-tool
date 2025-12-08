@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Monte Carlo DCF Simulator Ver.2.2</title>
+    <title>Monte Carlo DCF Simulator Ver.2.2.1</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script
         src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
@@ -268,7 +268,7 @@
         <!-- Left Column: Inputs -->
         <div class="sidebar">
             <div class="card">
-                <h1>モンテカルロDCFシミュレーター Ver.2.2</h1>
+                <h1>モンテカルロDCFシミュレーター Ver.2.2.1</h1>
 
                 <div class="input-group">
                     <h3>(A) FCF計算 <span id="fcfHelp"
@@ -544,6 +544,13 @@
 
                 <div class="actions" style="margin-bottom: 25px;">
                     <button type="button" id="runImpliedBtn" style="background-color: #059669;">逆DCFシミュレーション実行</button>
+                </div>
+                <div id="progressContainerImplied" class="hidden" style="margin-bottom: 20px;">
+                    <div style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:2px;">
+                        <span>逆DCF計算中...</span>
+                        <span id="progressLabelImplied">0%</span>
+                    </div>
+                    <progress id="progressBarImplied" value="0" max="100"></progress>
                 </div>
 
                 <!-- Implied FCF -->
