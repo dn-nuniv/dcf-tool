@@ -615,6 +615,17 @@
 
             <div class="card">
                 <h2>AI解説プロンプト生成</h2>
+                <div class="input-group" style="margin-bottom: 10px;">
+                    <label>想定読者（ペルソナ）</label>
+                    <select id="personaSelect">
+                        <option value="student" selected>学生</option>
+                        <option value="teacher">教員</option>
+                        <option value="researcher">研究者</option>
+                    </select>
+                    <div style="font-size:0.8rem; color:#64748b; margin-top:4px;">
+                        読み手に合わせて説明のトーンを変えられます
+                    </div>
+                </div>
                 <div class="actions">
                     <button type="button" id="generatePromptBtn">解説用プロンプト生成</button>
                     <button type="button" class="secondary" id="copyPromptBtn" style="margin-top:0;">コピー</button>

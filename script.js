@@ -13,6 +13,55 @@ let chartInstance = null;
 let simulationResults = []; // Stores valid price results
 let lastSimulationParams = {}; // Stores params for AI prompt
 
+// Persona presets for AI explanation tone & format
+const personaPresets = {
+    student: {
+        label: "学生",
+        instruction: `
+- ファイナンス理論をあまり知らない大学生向けに説明してください。
+- 数式や専門用語は最小限にし、出てきた場合は必ず「一度かみ砕いた日本語」で言い換えてください。
+- 文体は「です・ます調」で、1文はなるべく短くしてください。
+- 以下の見出し構成で説明してください（見出し名もそのまま使ってください）：
+  1. 今日の結論（このシミュレーションからわかること）
+  2. どんな前提で計算したか
+  3. グラフと数字のどこを見ればよいか
+  4. 将来のリスクと不確実性をどう考えればよいか
+  5. レポートや試験で使える一言まとめ
+- 各セクションでは、最初に短い説明文を書き、そのあとに3〜5個程度の箇条書きを入れてください。
+        `.trim()
+    },
+    teacher: {
+        label: "教員",
+        instruction: `
+- 大学でファイナンスや会計を教える教員向けに説明してください。
+- 文体は「です・ます調」でも「である調」でも構いませんが、説明は論理的かつ授業で使いやすい形にしてください。
+- 以下の見出し構成で説明してください（見出し名もそのまま使ってください）：
+  1. 授業で強調したいポイント
+  2. 板書・スライドの構成案
+  3. 学生に問いかけたい質問例
+  4. モデルの前提と注意すべき落とし穴
+  5. 発展的な話題（時間があれば触れたい点）
+- 各セクションでは、授業でそのまま使えるように、箇条書きを多めにしてください。
+- 特に「板書・スライドの構成案」では、スライドのタイトル案や、どのグラフをどの順番で見せるかを具体的に書いてください。
+        `.trim()
+    },
+    researcher: {
+        label: "研究者",
+        instruction: `
+- ファイナンス／会計／経営学の研究者向けに説明してください。
+- 文体は「である調」を基本とし、必要に応じて専門用語・数式（記号レベル）も用いて構いません。
+- 以下の見出し構成で説明してください（見出し名もそのまま使ってください）：
+  1. 背景と目的
+  2. モデルとシミュレーション設計の要点
+  3. 主な結果の要約（分布・レンジ・確率）
+  4. 理論的・実務的含意
+  5. 限界と今後の研究課題
+- Monte Carlo DCF と逆DCF（implied g / implied FCF）の前提が、既存文献の議論（例：DCFの前提、リスク中立確率、マーケットインプリケーション等）とどう関わるかにも軽く触れてください。
+- ただし、本ツールが教育用であることも踏まえ、あまりに複雑な数式展開は避け、解釈に焦点を当ててください。
+        `.trim()
+    }
+};
+
 // --- Helper Functions ---
 
 /**
@@ -1105,15 +1154,15 @@ async function runImpliedSimulation() {
 
         renderImpliedHeatmap(impliedFcfSamples, impliedGSamples);
         const impliedWrapper = document.getElementById('impliedHeatmapWrapper');
-    if (impliedWrapper) {
-        impliedWrapper.classList.remove('hidden');
-    }
-    const impliedPeak = document.getElementById('impliedHeatmapPeak');
-    if (impliedPeak && impliedResults.fcfSamples && impliedResults.fcfSamples.length) {
-        impliedPeak.classList.remove('hidden');
-    }
+        if (impliedWrapper) {
+            impliedWrapper.classList.remove('hidden');
+        }
+        const impliedPeak = document.getElementById('impliedHeatmapPeak');
+        if (impliedPeak && impliedResults.fcfSamples && impliedResults.fcfSamples.length) {
+            impliedPeak.classList.remove('hidden');
+        }
 
-} catch (e) {
+    } catch (e) {
         console.error(e);
         alert("エラーが発生しました: " + e.message);
     } finally {
@@ -1473,7 +1522,16 @@ function generatePrompt() {
         alert("先にシミュレーションを実行してください。");
         return;
     }
-    const { fcf0, params, modePrice, meanPrice, medianPrice, p05, p95, prob, netDebt, modePercentile, currentPercentile } = lastSimulationParams;
+
+    const {
+        fcf0, params, modePrice, meanPrice, medianPrice,
+        p05, p95, prob, netDebt,
+        modePercentile, currentPercentile
+    } = lastSimulationParams;
+
+    const personaSelect = document.getElementById('personaSelect');
+    const personaKey = personaSelect ? personaSelect.value : 'student';
+    const persona = personaPresets[personaKey] || personaPresets.student;
 
     const rDesc = params.rFixedCheck
         ? `Fixed = ${(params.rFixed * 100).toFixed(2)}%`
@@ -1481,28 +1539,32 @@ function generatePrompt() {
 
     let fcfDesc = "";
     if (params.calcMode === 'future') {
-        fcfDesc = `- 将来FCF (Year 1-5): ${params.futureFcfInputs.join(", ")}\n- Terminal Value基準 (Year 5): ${fcf0.toFixed(2)}`;
+        fcfDesc =
+            `- 将来FCF (Year 1-5): ${params.futureFcfInputs.join(", ")}\n` +
+            `- Terminal Value基準 (Year 5のFCF): ${fcf0.toFixed(2)}`;
     } else {
         fcfDesc = `- 基準年FCF（推計）：${fcf0.toFixed(2)}`;
     }
 
-    // Reverse DCF (implied) section
-    let impliedSection = "逆DCF（市場織り込み）: 未計算";
+    // 逆DCF（implied）の結果をまとめる
+    let impliedSection = "逆DCF（市場が織り込む水準）: 未計算";
     if (impliedResults && impliedResults.fcfStats && impliedResults.gStats) {
         const unitDiv = impliedResults.params ? impliedResults.params.unitMult : 1;
         const fcfStats = impliedResults.fcfStats;
         const gStats = impliedResults.gStats;
         const fmtPct = (n) => (n * 100).toFixed(2) + "%";
-        impliedSection = `
-逆DCF（市場が織り込む水準）:
-- Implied FCF: 平均=${formatNumber(fcfStats.mean / unitDiv)} / 中央値=${formatNumber(fcfStats.median / unitDiv)} / 5%-95%=${formatNumber(fcfStats.p05 / unitDiv)}～${formatNumber(fcfStats.p95 / unitDiv)}
-- Implied g: 平均=${fmtPct(gStats.mean)} / 中央値=${fmtPct(gStats.median)} / 5%-95%=${fmtPct(gStats.p05)}～${fmtPct(gStats.p95)}
-        `.trim();
+
+        impliedSection = [
+            "逆DCF（市場が織り込む水準）:",
+            `- Implied FCF: 平均=${formatNumber(fcfStats.mean / unitDiv)} / 中央値=${formatNumber(fcfStats.median / unitDiv)} / 5%-95%=${formatNumber(fcfStats.p05 / unitDiv)}～${formatNumber(fcfStats.p95 / unitDiv)}`,
+            `- Implied g: 平均=${fmtPct(gStats.mean)} / 中央値=${fmtPct(gStats.median)} / 5%-95%=${fmtPct(gStats.p05)}～${fmtPct(gStats.p95)}`
+        ].join("\n");
     }
 
-    const text = `
+    const baseDescription = `
 以下の前提でモンテカルロDCFシミュレーションを行いました。
-前提：
+
+【前提】
 - 計算モード: ${params.calcMode === 'future' ? '詳細（将来予測入力）' : '簡易（過去平均）'}
 ${fcfDesc}
 - 永続成長率 g（三角分布）：min = ${(params.gMin * 100).toFixed(2)}%, mode = ${(params.gMode * 100).toFixed(2)}%, max = ${(params.gMax * 100).toFixed(2)}%
@@ -1512,7 +1574,7 @@ ${fcfDesc}
 - 発行株式数： ${params.shares}
 - 現在株価： ${params.currentPrice}
 
-結果（理論株価）：
+【結果（理論株価の分布）】
 - モードDCF（g=mode, r=mode）： ${isNaN(modePrice) ? "N/A" : modePrice.toFixed(0)}
 - 分布の平均： ${meanPrice.toFixed(0)}
 - 分布の中央値： ${medianPrice.toFixed(0)}
@@ -1522,13 +1584,32 @@ ${fcfDesc}
 - モードDCFの位置（理論価格分布の中のパーセンタイル）： ${Number.isFinite(modePercentile) ? modePercentile.toFixed(1) + "%" : "N/A"}
 - 現在株価の位置（理論価格分布の中のパーセンタイル）： ${Number.isFinite(currentPercentile) ? currentPercentile.toFixed(1) + "%" : "N/A"}
 
+【逆DCFの集約】
 ${impliedSection}
-
-これらの結果を踏まえて、投資家向けにわかりやすい言葉で、
-企業価値評価とリスク・不確実性について解説してください。
     `.trim();
 
-    document.getElementById('promptOutput').value = text;
+    const personaInstructionBlock = `
+あなたは、${persona.label}向けに説明を行うファイナンスの専門家です。
+
+これから渡す「前提」と「結果」の情報をもとに、
+${persona.label}が理解しやすいように企業価値評価とリスク・不確実性を解説してください。
+
+解説は **日本語** で書いてください。
+解説を書くときは、次の条件を必ず守ってください（重要）：
+
+${persona.instruction}
+    `.trim();
+
+    const finalPrompt = `
+${baseDescription}
+
+────────────────────
+【執筆条件（ペルソナ）】
+
+${personaInstructionBlock}
+    `.trim();
+
+    document.getElementById('promptOutput').value = finalPrompt;
 }
 
 function copyPrompt() {
