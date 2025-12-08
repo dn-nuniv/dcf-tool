@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Monte Carlo DCF Simulator Ver.2.1</title>
+    <title>Monte Carlo DCF Simulator Ver.2.2</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script
         src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
@@ -268,7 +268,7 @@
         <!-- Left Column: Inputs -->
         <div class="sidebar">
             <div class="card">
-                <h1>モンテカルロDCFシミュレーター Ver.2.1</h1>
+                <h1>モンテカルロDCFシミュレーター Ver.2.2</h1>
 
                 <div class="input-group">
                     <h3>(A) FCF計算 <span id="fcfHelp"
@@ -462,6 +462,22 @@
                         <div class="result-label">現在株価の位置 (％点)</div>
                         <div class="result-value" id="resCurrentPct">-</div>
                     </div>
+                    <div class="result-item">
+                        <div class="result-label">標準偏差 (円)</div>
+                        <div class="result-value" id="resStdDev">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">分散</div>
+                        <div class="result-value" id="resVariance">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">歪度</div>
+                        <div class="result-value" id="resSkewness">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">尖度（超過）</div>
+                        <div class="result-value" id="resKurtosis">-</div>
+                    </div>
                 </div>
             </div>
 
@@ -545,6 +561,22 @@
                         <div class="result-label">5% - 95% レンジ</div>
                         <div class="result-value" id="resImpliedFcfRange">-</div>
                     </div>
+                    <div class="result-item">
+                        <div class="result-label">標準偏差</div>
+                        <div class="result-value" id="resImpliedFcfStdDev">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">分散</div>
+                        <div class="result-value" id="resImpliedFcfVariance">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">歪度</div>
+                        <div class="result-value" id="resImpliedFcfSkewness">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">尖度（超過）</div>
+                        <div class="result-value" id="resImpliedFcfKurtosis">-</div>
+                    </div>
                 </div>
                 <div class="chart-container" style="height: 300px;">
                     <canvas id="impliedFcfChart"></canvas>
@@ -571,6 +603,22 @@
                     <div class="result-item" style="grid-column: span 2;">
                         <div class="result-label">5% - 95% レンジ</div>
                         <div class="result-value" id="resImpliedGRange">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">標準偏差</div>
+                        <div class="result-value" id="resImpliedGStdDev">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">分散</div>
+                        <div class="result-value" id="resImpliedGVariance">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">歪度</div>
+                        <div class="result-value" id="resImpliedGSkewness">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-label">尖度（超過）</div>
+                        <div class="result-value" id="resImpliedGKurtosis">-</div>
                     </div>
                 </div>
                 <div class="chart-container" style="height: 300px;">

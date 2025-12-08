@@ -146,6 +146,31 @@ function percentileRank(sortedArr, value) {
     return (count / sortedArr.length) * 100;
 }
 
+// Calculate variance, standard deviation, skewness, kurtosis (population basis)
+function calcMoments(arr, precomputedMean = null) {
+    const n = arr.length;
+    if (n === 0) return { variance: NaN, stdDev: NaN, skewness: NaN, kurtosis: NaN };
+
+    const mu = Number.isFinite(precomputedMean) ? precomputedMean : mean(arr);
+    let m2 = 0, m3 = 0, m4 = 0;
+
+    for (let i = 0; i < n; i++) {
+        const d = arr[i] - mu;
+        const d2 = d * d;
+        m2 += d2;
+        m3 += d2 * d;
+        m4 += d2 * d2;
+    }
+
+    const variance = m2 / n;
+    const stdDev = Math.sqrt(variance);
+    const skewness = stdDev > 0 ? (m3 / n) / Math.pow(stdDev, 3) : NaN;
+    // Excess kurtosis (kurtosis - 3)
+    const kurtosis = variance > 0 ? (m4 / n) / (variance * variance) - 3 : NaN;
+
+    return { variance, stdDev, skewness, kurtosis };
+}
+
 // Normalize numeric string (strip commas)
 function normalizeNumberString(str) {
     return (str || '').toString().replace(/,/g, '').trim();
@@ -458,6 +483,7 @@ async function runSimulation() {
     const medianPrice = prices[Math.floor(prices.length / 2)];
     const p05 = prices[Math.floor(prices.length * 0.05)];
     const p95 = prices[Math.floor(prices.length * 0.95)];
+    const { variance, stdDev, skewness, kurtosis } = calcMoments(prices, meanPrice);
 
     // Probability > Current Price (Binary Search)
     const idxGtCurrent = firstGreaterIndex(prices, params.currentPrice);
@@ -494,11 +520,15 @@ async function runSimulation() {
 
     document.getElementById('resModePct').textContent = Number.isFinite(modePercentile) ? `${modePercentile.toFixed(1)}%` : "N/A";
     document.getElementById('resCurrentPct').textContent = Number.isFinite(currentPercentile) ? `${currentPercentile.toFixed(1)}%` : "N/A";
+    document.getElementById('resStdDev').textContent = formatNumber(stdDev);
+    document.getElementById('resVariance').textContent = formatNumber(variance);
+    document.getElementById('resSkewness').textContent = formatDecimal(skewness);
+    document.getElementById('resKurtosis').textContent = formatDecimal(kurtosis);
 
     // Store params for AI prompt
     lastSimulationParams = {
         fcf0, params, modePrice, meanPrice, medianPrice, p05, p95, prob, netDebt,
-        modePercentile, currentPercentile
+        modePercentile, currentPercentile, variance, stdDev, skewness, kurtosis
     };
 
     // Update Chart
@@ -515,6 +545,14 @@ async function runSimulation() {
 function formatNumber(num) {
     if (!Number.isFinite(num)) return "-";
     return Number(num).toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
+function formatDecimal(num, fractionDigits = 3) {
+    if (!Number.isFinite(num)) return "-";
+    return Number(num).toLocaleString(undefined, {
+        minimumFractionDigits: fractionDigits,
+        maximumFractionDigits: fractionDigits
+    });
 }
 
 function updateUnitLabels() {
@@ -1142,9 +1180,18 @@ async function runImpliedSimulation() {
 
         // For G
         const fmtPct = (n) => (n * 100).toFixed(2) + "%";
+        const fmtPctVar = (n) => (n * 100 * 100).toFixed(2) + "%²";
         document.getElementById('resImpliedGMean').textContent = fmtPct(gStats.mean);
         document.getElementById('resImpliedGMedian').textContent = fmtPct(gStats.median);
         document.getElementById('resImpliedGRange').textContent = `${fmtPct(gStats.p05)} - ${fmtPct(gStats.p95)}`;
+        document.getElementById('resImpliedFcfStdDev').textContent = formatNumber(fcfStats.stdDev / unitDiv);
+        document.getElementById('resImpliedFcfVariance').textContent = formatNumber(fcfStats.variance / (unitDiv * unitDiv));
+        document.getElementById('resImpliedFcfSkewness').textContent = formatDecimal(fcfStats.skewness);
+        document.getElementById('resImpliedFcfKurtosis').textContent = formatDecimal(fcfStats.kurtosis);
+        document.getElementById('resImpliedGStdDev').textContent = fmtPct(gStats.stdDev);
+        document.getElementById('resImpliedGVariance').textContent = fmtPctVar(gStats.variance);
+        document.getElementById('resImpliedGSkewness').textContent = formatDecimal(gStats.skewness);
+        document.getElementById('resImpliedGKurtosis').textContent = formatDecimal(gStats.kurtosis);
 
         // Render Charts
         // Pass map results (new float64array) to histogram renderer
@@ -1172,12 +1219,13 @@ async function runImpliedSimulation() {
 }
 
 function getStats(sortedArr) {
-    if (sortedArr.length === 0) return { mean: 0, median: 0, p05: 0, p95: 0 };
-    const mean = sortedArr.reduce((a, b) => a + b, 0) / sortedArr.length;
+    if (sortedArr.length === 0) return { mean: 0, median: 0, p05: 0, p95: 0, variance: NaN, stdDev: NaN, skewness: NaN, kurtosis: NaN };
+    const meanVal = sortedArr.reduce((a, b) => a + b, 0) / sortedArr.length;
     const median = sortedArr[Math.floor(sortedArr.length / 2)];
     const p05 = sortedArr[Math.floor(sortedArr.length * 0.05)];
     const p95 = sortedArr[Math.floor(sortedArr.length * 0.95)];
-    return { mean, median, p05, p95 };
+    const { variance, stdDev, skewness, kurtosis } = calcMoments(sortedArr, meanVal);
+    return { mean: meanVal, median, p05, p95, variance, stdDev, skewness, kurtosis };
 }
 
 // Reusable Histogram Renderer
@@ -1526,7 +1574,8 @@ function generatePrompt() {
     const {
         fcf0, params, modePrice, meanPrice, medianPrice,
         p05, p95, prob, netDebt,
-        modePercentile, currentPercentile
+        modePercentile, currentPercentile,
+        variance, stdDev, skewness, kurtosis
     } = lastSimulationParams;
 
     const personaSelect = document.getElementById('personaSelect');
@@ -1553,11 +1602,14 @@ function generatePrompt() {
         const fcfStats = impliedResults.fcfStats;
         const gStats = impliedResults.gStats;
         const fmtPct = (n) => (n * 100).toFixed(2) + "%";
+        const fmtPctVar = (n) => (n * 100 * 100).toFixed(2) + "%²";
 
         impliedSection = [
             "逆DCF（市場が織り込む水準）:",
             `- Implied FCF: 平均=${formatNumber(fcfStats.mean / unitDiv)} / 中央値=${formatNumber(fcfStats.median / unitDiv)} / 5%-95%=${formatNumber(fcfStats.p05 / unitDiv)}～${formatNumber(fcfStats.p95 / unitDiv)}`,
-            `- Implied g: 平均=${fmtPct(gStats.mean)} / 中央値=${fmtPct(gStats.median)} / 5%-95%=${fmtPct(gStats.p05)}～${fmtPct(gStats.p95)}`
+            `- Implied g: 平均=${fmtPct(gStats.mean)} / 中央値=${fmtPct(gStats.median)} / 5%-95%=${fmtPct(gStats.p05)}～${fmtPct(gStats.p95)}`,
+            `- 形状指標 (FCF): 標準偏差=${formatNumber(fcfStats.stdDev / unitDiv)} / 分散=${formatNumber(fcfStats.variance / (unitDiv * unitDiv))} / 歪度=${formatDecimal(fcfStats.skewness)} / 尖度(超過)=${formatDecimal(fcfStats.kurtosis)}`,
+            `- 形状指標 (g): 標準偏差=${fmtPct(gStats.stdDev)} / 分散=${fmtPctVar(gStats.variance)} / 歪度=${formatDecimal(gStats.skewness)} / 尖度(超過)=${formatDecimal(gStats.kurtosis)}`
         ].join("\n");
     }
 
@@ -1583,6 +1635,10 @@ ${fcfDesc}
 
 - モードDCFの位置（理論価格分布の中のパーセンタイル）： ${Number.isFinite(modePercentile) ? modePercentile.toFixed(1) + "%" : "N/A"}
 - 現在株価の位置（理論価格分布の中のパーセンタイル）： ${Number.isFinite(currentPercentile) ? currentPercentile.toFixed(1) + "%" : "N/A"}
+- 標準偏差： ${formatNumber(stdDev)}
+- 分散： ${formatNumber(variance)}
+- 歪度： ${formatDecimal(skewness)}
+- 尖度（超過）： ${formatDecimal(kurtosis)}
 
 【逆DCFの集約】
 ${impliedSection}
@@ -1666,6 +1722,10 @@ function resetInputs(e) {
     document.getElementById('resProb').textContent = "-";
     document.getElementById('resModePct').textContent = "-";
     document.getElementById('resCurrentPct').textContent = "-";
+    document.getElementById('resStdDev').textContent = "-";
+    document.getElementById('resVariance').textContent = "-";
+    document.getElementById('resSkewness').textContent = "-";
+    document.getElementById('resKurtosis').textContent = "-";
     document.getElementById('sensitivityTable').innerHTML = "";
     document.getElementById('heatmapContainer').style.display = 'none';
     const impliedWrapper = document.getElementById('impliedHeatmapWrapper');
